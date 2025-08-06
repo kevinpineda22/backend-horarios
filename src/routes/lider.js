@@ -7,13 +7,13 @@ import {
   createHorario,
   updateHorario,
   deleteHorario,
-} from "../controller/horariosController.js";
+} from "../controllers/horariosController.js";
 import {
   getObservacionesByEmpleadoId,
   createObservacion,
   updateObservacion,
   deleteObservacion,
-} from "../controller/observacionesController.js";
+} from "../controllers/observacionesController.js";
 import supabase from "../services/supabase.service.js";
 
 router.use(authenticateLider);
