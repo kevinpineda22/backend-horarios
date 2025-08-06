@@ -16,7 +16,7 @@ app.use(express.json({ limit: '50mb' }));
 app.use('/api/public', publicRoutes);
 app.use('/api/lider', liderRoutes);
 
-app.get('/api/health', (req, res) => {
+app.get('/', (req, res) => {
   res.status(200).send('yujuuuuuuuuuuuuuuuuuuuu');
 });
 
