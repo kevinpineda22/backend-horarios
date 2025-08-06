@@ -14,7 +14,7 @@ app.use(cors());
 app.use(express.json({ limit: "50mb" }));
 
 // Manejo global de preflight OPTIONS para CORS
-app.options("/*", cors());
+app.options("*", cors());
 
 app.use("/api/public", publicRoutes);
 app.use("/api/lider", liderRoutes);
