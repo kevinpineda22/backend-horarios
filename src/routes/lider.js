@@ -13,7 +13,7 @@ import {
   createObservacion,
   updateObservacion,
   deleteObservacion,
-} from "../controllers/observacionesController.js";
+} from "../controller/observacionesController.js";
 import supabase from "../services/supabase.service.js";
 
 router.use(authenticateLider);
