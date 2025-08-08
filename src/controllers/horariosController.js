@@ -1,6 +1,6 @@
 // src/controllers/horariosController.js
 import { supabaseAxios } from '../services/supabaseAxios.js';
-import { generateWeekSchedule } from '../utils/schedule.js';
+import { generateScheduleForRange } from '../utils/schedule.js';
 
 export const getHorariosByEmpleadoId = async (req, res) => {
   const { empleado_id } = req.params;
@@ -16,27 +16,25 @@ export const getHorariosByEmpleadoId = async (req, res) => {
 
 export const createHorario = async (req, res) => {
   try {
-    const { empleado_id, fecha_inicio, extras = 0 } = req.body;
+    const { empleado_id, fecha_inicio, fecha_fin, extras = 0 } = req.body;
     const lider_id = req.user.id;
 
-    // genera array de días
-    const dias = generateWeekSchedule(fecha_inicio, Number(extras));
-    const fecha_fin = dias[dias.length - 1].fecha;
-    const total_horas_semana = dias.reduce((sum, d) => sum + d.horas, 0);
+    // Genera un arreglo de horarios, uno por cada semana en el rango
+    const horariosSemanales = generateScheduleForRange(fecha_inicio, fecha_fin, Number(extras));
 
-    const payload = {
+    const payload = horariosSemanales.map(horario => ({
       empleado_id,
       lider_id,
       tipo: 'semanal',
-      fecha_inicio,
-      fecha_fin,
-      dias,                     // JSONB
-      total_horas_semana
-    };
+      fecha_inicio: horario.fecha_inicio,
+      fecha_fin: horario.fecha_fin,
+      dias: horario.dias,
+      total_horas_semana: horario.total_horas_semana
+    }));
 
-    const { data, error } = await supabaseAxios.post('/horarios', [payload]);
+    const { data, error } = await supabaseAxios.post('/horarios', payload);
     if (error) throw error;
-    res.status(201).json(data[0]);
+    res.status(201).json(data);
 
   } catch (e) {
     console.error(e);
