@@ -5,13 +5,11 @@ import {
   addDays,
   setHours,
   setMinutes,
-  addMinutes,
   isSameDay
 } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 // Constantes para un código más claro
-const COLOMBIAN_TIME_ZONE_OFFSET = -300; // GMT-5 en minutos
 const BREAK_MINUTES = 60; // 45 de almuerzo + 15 de desayuno
 
 // Función principal que genera un horario para una semana específica
@@ -30,15 +28,11 @@ const generateWeekSchedule = (date) => {
 
     // Horarios de lunes a viernes
     if (i < 5) {
-      // Horario de inicio a las 7:00 AM hora colombiana
       start = setMinutes(setHours(currentDay, 7), 0);
       
-      // Lunes a Jueves: 7am - 6pm (10 horas netas de trabajo)
-      if (i < 4) {
+      if (i < 4) { // Lunes a Jueves: 7am - 6pm
         end = setMinutes(setHours(currentDay, 18), 0);
-      }
-      // Viernes: 7am - 5pm (9 horas netas de trabajo para un total de 56h)
-      else {
+      } else { // Viernes: 7am - 5pm
         end = setMinutes(setHours(currentDay, 17), 0);
       }
 
@@ -52,12 +46,15 @@ const generateWeekSchedule = (date) => {
       horasDiarias = (end.getHours() - start.getHours()) - (BREAK_MINUTES / 60);
     }
 
+    // Convertir las fechas a un formato que no cambie la zona horaria
+    const startString = format(start, "yyyy-MM-dd'T'HH:mm:ss");
+    const endString = format(end, "yyyy-MM-dd'T'HH:mm:ss");
+
     days.push({
       descripcion: dayOfWeek.charAt(0).toUpperCase() + dayOfWeek.slice(1),
       fecha: format(currentDay, 'yyyy-MM-dd'),
-      // Se ajusta la hora al formato ISO, la visualización en el frontend la ajusta a la hora local del navegador
-      start: start.toISOString(),
-      end: end.toISOString(),
+      start: startString,
+      end: endString,
       horas: horasDiarias
     });
 
@@ -78,7 +75,6 @@ export const generateScheduleForRange = (startDate, endDate) => {
   currentWeek = startOfWeek(currentWeek, { weekStartsOn: 1 });
 
   while (currentWeek <= new Date(endDate)) {
-    // La función ya no necesita el argumento 'extras'
     schedules.push(generateWeekSchedule(currentWeek));
     currentWeek = addWeeks(currentWeek, 1);
   }
