@@ -16,11 +16,12 @@ export const getHorariosByEmpleadoId = async (req, res) => {
 
 export const createHorario = async (req, res) => {
   try {
-    const { empleado_id, fecha_inicio, fecha_fin, extras = 0 } = req.body;
+    const { empleado_id, fecha_inicio, fecha_fin } = req.body;
     const lider_id = req.user.id;
+    const extras = 12; // Valor fijo de 12 horas extra
 
     // Genera un arreglo de horarios, uno por cada semana en el rango
-    const horariosSemanales = generateScheduleForRange(fecha_inicio, fecha_fin, Number(extras));
+    const horariosSemanales = generateScheduleForRange(fecha_inicio, fecha_fin, extras);
 
     const payload = horariosSemanales.map(horario => ({
       empleado_id,
