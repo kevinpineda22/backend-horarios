@@ -1,21 +1,15 @@
-// src/middlewares/authMiddleware.js
-import supabase from '../services/supabase.service.js';
+import { createClient } from '@supabase/supabase-js';
+import dotenv from 'dotenv';
+dotenv.config();
 
-const authenticateLider = async (req, res, next) => {
-  const { authorization } = req.headers;
-  if (!authorization) {
-    return res.status(401).send('Unauthorized: No token provided');
-  }
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 
-  const token = authorization.split(' ')[1];
+export const authenticateUser = async (req, res, next) => {
+  const auth = req.headers.authorization;
+  if (!auth) return res.status(401).json({ message: 'Token missing' });
+  const token = auth.split(' ')[1];
   const { data: { user }, error } = await supabase.auth.getUser(token);
-
-  if (error || !user) {
-    return res.status(401).send('Unauthorized: Invalid token');
-  }
-
+  if (error || !user) return res.status(401).json({ message: 'Invalid token' });
   req.user = user;
   next();
 };
-
-export default authenticateLider;

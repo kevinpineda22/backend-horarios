@@ -1,29 +1,23 @@
-// app.js
-import dotenv from "dotenv";
+import dotenv from 'dotenv';
 dotenv.config();
-import express from "express";
-import cors from "cors";
+import express from 'express';
+import cors from 'cors';
 
-import publicRoutes from "./src/routes/public.js";
-import liderRoutes from "./src/routes/lider.js";
+import horariosRoutes from './src/routes/horarios.js';
+import observacionesRoutes from './src/routes/observaciones.js';
+import publicRoutes from './src/routes/public.js';
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT;
 
-// --- Middleware ---
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-app.use("/api/public", publicRoutes);
-app.use("/api/lider", liderRoutes);
+app.use('/api/horarios', horariosRoutes);
+app.use('/api/observaciones', observacionesRoutes);
+app.use('/api/public', publicRoutes);
 
-app.get("/", (req, res) => {
-  res.status(200).send("yujuuuuuuuuuuuuuuuuuuuu");
-});
+app.get('/', (_, res) => res.send('Gestor de Horarios API corriendooooo'));
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
-
-export default app;
+app.listen(PORT, () => console.log(`Server on port ${PORT}`));

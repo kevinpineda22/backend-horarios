@@ -1,123 +1,84 @@
-// src/controllers/observacionesController.js
-import supabase from '../services/supabase.service.js';
-import { Buffer } from 'node:buffer';
+import { supabaseAxios, storageClient } from '../services/supabaseAxios.js';
+import { Buffer } from 'buffer';
 
 export const getObservacionesByEmpleadoId = async (req, res) => {
   const { empleado_id } = req.params;
   try {
-    const { data, error } = await supabase
-      .from("observaciones")
-      .select("*")
-      .eq("empleado_id", empleado_id)
-      .order("fecha_creacion", { ascending: false });
-    if (error) throw error;
-    res.status(200).json(data);
-  } catch (error) {
-    res.status(500).send('Error al obtener observaciones.');
+    const url = `/observaciones?select=*&empleado_id=eq.${empleado_id}&order=fecha_creacion.desc`;
+    const { data } = await supabaseAxios.get(url);
+    res.json(data);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: 'Error fetching observaciones' });
   }
 };
 
 export const createObservacion = async (req, res) => {
-    const { empleado_id, observacion, tipo_novedad, documento_base64, file_name, fecha_novedad } = req.body;
-    let documentoUrl = null;
-    try {
-        if (documento_base64 && file_name) {
-            const buffer = Buffer.from(documento_base64, 'base64');
-            const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}_${file_name}`;
-            
-            const { data: uploadData, error: uploadError } = await supabase.storage
-                .from('documentos-observaciones-ph')
-                .upload(fileName, buffer, {
-                    contentType: 'application/octet-stream'
-                });
-
-            if (uploadError) throw uploadError;
-            documentoUrl = supabase.storage.from('documentos-observaciones-ph').getPublicUrl(uploadData.path).data.publicUrl;
-        }
-
-        const payload = {
-            empleado_id,
-            observacion,
-            tipo_novedad,
-            documento_adjunto: documentoUrl,
-            lider_id: req.user.id,
-            fecha_creacion: new Date().toISOString(),
-            fecha_novedad: fecha_novedad || new Date().toISOString()
-        };
-
-        const { error } = await supabase.from("observaciones").insert([payload]);
-        if (error) throw error;
-        res.status(201).send('Observación guardada exitosamente.');
-
-    } catch (error) {
-        console.error('Error al guardar observación:', error);
-        res.status(500).send('Error al guardar observación.');
+  const { empleado_id, observacion, tipo_novedad, documento_base64, file_name, fecha_novedad } = req.body;
+  let urlPublic = null;
+  try {
+    if (documento_base64 && file_name) {
+      const buf = Buffer.from(documento_base64, 'base64');
+      const fn = `${Date.now()}_${Math.random().toString(36).substr(2)}_${file_name}`;
+      const { data, error } = await storageClient
+        .storage.from('documentos-observaciones-ph')
+        .upload(fn, buf);
+      if (error) throw error;
+      urlPublic = storageClient.storage.from('documentos-observaciones-ph').getPublicUrl(data.path).data.publicUrl;
     }
+    const payload = { empleado_id, observacion, tipo_novedad, documento_adjunto: urlPublic, lider_id: req.user.id, fecha_novedad };
+    const { data } = await supabaseAxios.post('/observaciones', [payload]);
+    res.status(201).json(data[0]);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: 'Error creating observacion' });
+  }
 };
 
 export const updateObservacion = async (req, res) => {
   const { id } = req.params;
-  const { observacion, tipo_novedad, documento_base64, file_name, documento_adjunto_existente, fecha_novedad } = req.body;
-  let documentoUrl = documento_adjunto_existente;
-
+  const { observacion, tipo_novedad, documento_adjunto_existente, documento_base64, file_name, fecha_novedad } = req.body;
+  let urlPublic = documento_adjunto_existente;
   try {
-      if (documento_base64 && file_name) {
-          if (documento_adjunto_existente) {
-              const oldFileName = documento_adjunto_existente.split('/').pop();
-              await supabase.storage.from('documentos-observaciones-ph').remove([oldFileName]);
-          }
-
-          const buffer = Buffer.from(documento_base64, 'base64');
-          const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}_${file_name}`;
-          const { data: uploadData, error: uploadError } = await supabase.storage
-              .from('documentos-observaciones-ph')
-              .upload(fileName, buffer, {
-                  contentType: 'application/octet-stream'
-              });
-
-          if (uploadError) throw uploadError;
-          documentoUrl = supabase.storage.from('documentos-observaciones-ph').getPublicUrl(uploadData.path).data.publicUrl;
-      } else if (documento_base64 === null) {
-          if (documento_adjunto_existente) {
-              const oldFileName = documento_adjunto_existente.split('/').pop();
-              await supabase.storage.from('documentos-observaciones-ph').remove([oldFileName]);
-          }
-          documentoUrl = null;
+    if (documento_base64 && file_name) {
+      // borrar antiguo si existe
+      if (documento_adjunto_existente) {
+        const old = documento_adjunto_existente.split('/').pop();
+        await storageClient.storage.from('documentos-observaciones-ph').remove([old]);
       }
-
-      const payload = {
-          observacion,
-          tipo_novedad,
-          documento_adjunto: documentoUrl,
-          fecha_novedad: fecha_novedad || new Date().toISOString()
-      };
-
-      const { error } = await supabase.from("observaciones").update(payload).eq("id", id);
-      if (error) throw error;
-      res.status(200).send('Observación actualizada exitosamente.');
-
-  } catch (error) {
-      console.error('Error al actualizar observación:', error);
-      res.status(500).send('Error al actualizar observación.');
+      const buf = Buffer.from(documento_base64, 'base64');
+      const fn = `${Date.now()}_${Math.random().toString(36).substr(2)}_${file_name}`;
+      const { data } = await storageClient
+        .storage.from('documentos-observaciones-ph')
+        .upload(fn, buf);
+      urlPublic = storageClient.storage.from('documentos-observaciones-ph').getPublicUrl(data.path).data.publicUrl;
+    } else if (documento_base64 === null && documento_adjunto_existente) {
+      const old = documento_adjunto_existente.split('/').pop();
+      await storageClient.storage.from('documentos-observaciones-ph').remove([old]);
+      urlPublic = null;
+    }
+    const payload = { observacion, tipo_novedad, documento_adjunto: urlPublic, fecha_novedad };
+    await supabaseAxios.patch(`/observaciones?id=eq.${id}`, payload);
+    res.json({ message: 'Updated' });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: 'Error updating observacion' });
   }
 };
 
 export const deleteObservacion = async (req, res) => {
   const { id } = req.params;
   try {
-    const { data: obs, error: fetchError } = await supabase.from("observaciones").select("documento_adjunto").eq("id", id).single();
-    if (fetchError) throw fetchError;
-
+    // fetch adjunto
+    const { data: [obs] } = await supabaseAxios.get(`/observaciones?select=documento_adjunto&id=eq.${id}`);
     if (obs.documento_adjunto) {
-      const fileName = obs.documento_adjunto.split('/').pop();
-      const { error: deleteFileError } = await supabase.storage.from('documentos-observaciones-ph').remove([fileName]);
-      if (deleteFileError) console.error('Error al eliminar archivo del storage:', deleteFileError);
+      const old = obs.documento_adjunto.split('/').pop();
+      await storageClient.storage.from('documentos-observaciones-ph').remove([old]);
     }
-
-    const { error } = await supabase.from("observaciones").delete().eq("id", id);
-    if (error) throw error;
-    res.status(200).send('Observación eliminada exitosamente.');
-  } catch (error) {
-    res.status(500).send('Error al eliminar observación.');
+    await supabaseAxios.delete(`/observaciones?id=eq.${id}`);
+    res.json({ message: 'Deleted' });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: 'Error deleting observacion' });
   }
 };

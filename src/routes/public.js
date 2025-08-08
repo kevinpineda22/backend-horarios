@@ -1,38 +1,33 @@
-// src/routes/public.js
-import { Router } from 'express';
-const router = Router();
-import supabase from '../services/supabase.service.js';
+import express from 'express';
+import axios from 'axios';
+import dotenv from 'dotenv';
+dotenv.config();
+
+const router = express.Router();
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_KEY;
+const client = axios.create({ baseURL: `${supabaseUrl}/rest/v1`, headers: {
+  apikey: supabaseKey,
+  Authorization: `Bearer ${supabaseKey}`
+}});
 
 router.post('/consulta-horarios', async (req, res) => {
   const { cedula } = req.body;
-  if (!cedula) {
-    return res.status(400).send('Cédula no proporcionada.');
-  }
-
+  if (!cedula) return res.status(400).json({ message: 'Cédula missing' });
   try {
-    const { data: empleado, error: empleadoError } = await supabase
-      .from("empleados")
-      .select("id, nombre_completo")
-      .eq("cedula", cedula)
-      .maybeSingle();
-
-    if (empleadoError || !empleado) {
-      return res.status(404).send('Empleado no encontrado.');
-    }
-
-    const { data: horarios, error: horariosError } = await supabase
-      .from("horarios")
-      .select("tipo, fecha_inicio, fecha_fin, dias, total_horas_semana")
-      .eq("empleado_id", empleado.id)
-      .order("fecha_inicio", { ascending: false });
-
-    if (horariosError) throw horariosError;
-
-    res.status(200).json({ empleado, horarios });
-
-  } catch (error) {
-    console.error('Error en la consulta pública:', error);
-    res.status(500).send('Error interno del servidor');
+    // buscar empleado
+    const { data: [emp] } = await client.get(
+      `/empleados?select=id,nombre_completo&cedula=eq.${cedula}`
+    );
+    if (!emp) return res.status(404).json({ message: 'Empleado not found' });
+    // buscar horarios
+    const { data: horarios } = await client.get(
+      `/horarios?select=tipo,fecha_inicio,fecha_fin,total_horas_semana,dias&empleado_id=eq.${emp.id}&order=fecha_inicio.desc`
+    );
+    res.json({ empleado: emp, horarios });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: 'Server error' });
   }
 });
 
