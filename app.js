@@ -6,7 +6,7 @@ import cors from 'cors';
 import horariosRoutes from './src/routes/horarios.js';
 import observacionesRoutes from './src/routes/observaciones.js';
 import publicRoutes from './src/routes/public.js';
-import empleadosRoutes from './routes/empleadosRoutes.js';
+import empleadosRoutes from './src/routes/empleadosRoutes.js';
 
 const app = express();
 const PORT = process.env.PORT;
