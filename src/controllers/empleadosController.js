@@ -28,7 +28,6 @@ const findOrCreateId = async (tableName, name) => {
         if (existingData && existingData.length > 0) {
             return existingData[0].id;
         } else {
-            // Si no se encuentra, se crea el nuevo registro
             const { data: newData, error: createError } = await supabaseAxios.post(`/${tableName}`, [{ nombre: name }]);
             if (createError) throw createError;
             return newData[0].id;
@@ -105,10 +104,7 @@ export const uploadEmpleados = async (req, res) => {
     // Simular el parseo del archivo para obtener los datos de los empleados
     const empleadosToInsert = await parseFile(file);
 
-    let nuevos = 0;
-    let actualizados = 0;
-
-    // Usar upsert para insertar o actualizar en un solo paso
+    // Usa upsert para insertar o actualizar registros, evitando el error de duplicado.
     const { data, error } = await supabaseAxios.post(
       '/empleados', 
       empleadosToInsert.map(emp => ({ ...emp, estado: 'activo' })),
@@ -119,17 +115,25 @@ export const uploadEmpleados = async (req, res) => {
       }
     );
 
-    if (error) throw error;
+    if (error) {
+        if (error.code === '23505') {
+            return res.status(409).json({ message: 'Ya existe un empleado con esa cédula.' });
+        }
+        throw error;
+    }
     
-    // Contar los empleados creados y actualizados (esto podría ser más complejo,
-    // pero la API de Supabase no lo devuelve directamente).
-    // Suponemos que todos los que vienen en la lista son nuevos o actualizados.
+    let nuevos = 0;
+    let actualizados = 0;
+
+    // Supabase no devuelve directamente cuántos se crearon y cuántos se actualizaron.
+    // Aquí se necesita una lógica más avanzada si es necesario.
+    // Por ahora, asumimos que todos los registros se procesaron.
     nuevos = data.length;
     
     res.status(200).json({
       message: 'Empleados procesados con éxito.',
       nuevos,
-      actualizados: 0 // Simplificado
+      actualizados: 0 // Valor de marcador de posición
     });
   } catch (e) {
     console.error(e);
