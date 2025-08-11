@@ -22,14 +22,15 @@ const parseFile = (file) => {
 const findOrCreateId = async (tableName, name) => {
     if (!name) return null;
     try {
-        const { data: existingData } = await supabaseAxios.get(`/${tableName}?select=id,nombre&nombre=eq.${name}`);
+        const { data: existingData, error } = await supabaseAxios.get(`/${tableName}?select=id&nombre=eq.${name}`);
+        if (error) throw error;
         
         if (existingData && existingData.length > 0) {
             return existingData[0].id;
         } else {
-            // Se corrige la inserción para usar supabaseAxios en lugar de la variable no definida
-            const { data: newData, error } = await supabaseAxios.post(`/${tableName}`, { nombre: name });
-            if (error) throw error;
+            // Si no se encuentra, se crea el nuevo registro
+            const { data: newData, error: createError } = await supabaseAxios.post(`/${tableName}`, [{ nombre: name }]);
+            if (createError) throw createError;
             return newData[0].id;
         }
     } catch (e) {
