@@ -17,6 +17,27 @@ const parseFile = (file) => {
 };
 
 /**
+ * Función auxiliar para encontrar o crear una empresa/sede y devolver su UUID
+ */
+const findOrCreateId = async (tableName, name) => {
+    if (!name) return null;
+    try {
+        const { data: existingData } = await supabaseAxios.get(`/${tableName}?select=id&nombre=eq.${name}`);
+        if (existingData && existingData.length > 0) {
+            return existingData[0].id;
+        } else {
+            const { data: newData, error } = await supabaseAxios.post(`/${tableName}`, { nombre: name });
+            if (error) throw error;
+            return newData[0].id;
+        }
+    } catch (e) {
+        console.error(`Error finding or creating ${tableName}:`, e);
+        throw e;
+    }
+};
+
+
+/**
  * Endpoint para obtener todos los empleados.
  */
 export const getEmpleados = async (req, res) => {
@@ -36,7 +57,19 @@ export const getEmpleados = async (req, res) => {
 export const createEmpleado = async (req, res) => {
   try {
     const { cedula, nombre_completo, rol, empresa_id, sede_id } = req.body;
-    const payload = { cedula, nombre_completo, rol, empresa_id, sede_id, estado: 'activo' };
+    
+    // Busca o crea la empresa y la sede para obtener los IDs
+    const empresaUuid = await findOrCreateId('empresas', empresa_id);
+    const sedeUuid = await findOrCreateId('sedes', sede_id);
+    
+    const payload = {
+        cedula,
+        nombre_completo,
+        rol,
+        empresa_id: empresaUuid,
+        sede_id: sedeUuid,
+        estado: 'activo'
+    };
     
     // Realiza la inserción en la tabla de 'empleados'
     const { data, error } = await supabaseAxios.post('/empleados', [payload]);
