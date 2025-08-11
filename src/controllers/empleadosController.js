@@ -24,12 +24,11 @@ const findOrCreateId = async (tableName, name) => {
     try {
         const { data: existingData } = await supabaseAxios.get(`/${tableName}?select=id,nombre&nombre=eq.${name}`);
         
-        // CORRECCIÓN: Verifica si el array existe y tiene elementos antes de acceder a ellos.
         if (existingData && existingData.length > 0) {
             return existingData[0].id;
         } else {
-            // Si no se encuentra, se crea el nuevo registro
-            const { data: newData, error } = await supabase.from(tableName).insert({ nombre: name }).select();
+            // Se corrige la inserción para usar supabaseAxios en lugar de la variable no definida
+            const { data: newData, error } = await supabaseAxios.post(`/${tableName}`, { nombre: name });
             if (error) throw error;
             return newData[0].id;
         }
