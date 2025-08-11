@@ -6,6 +6,7 @@ import cors from 'cors';
 import horariosRoutes from './src/routes/horarios.js';
 import observacionesRoutes from './src/routes/observaciones.js';
 import publicRoutes from './src/routes/public.js';
+import empleadosRoutes from './routes/empleadosRoutes.js';
 
 const app = express();
 const PORT = process.env.PORT;
@@ -16,6 +17,7 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 app.use('/api/horarios', horariosRoutes);
 app.use('/api/observaciones', observacionesRoutes);
+app.use('/api/empleados', empleadosRoutes);
 app.use('/api/public', publicRoutes);
 
 app.get('/', (_, res) => res.send('Gestor de Horarios API corriendooooo'));
