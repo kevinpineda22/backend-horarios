@@ -108,21 +108,14 @@ export const uploadEmpleados = async (req, res) => {
     const { data: existingEmpleados } = await supabaseAxios.get('/empleados?select=cedula');
     const existingCedulas = new Set(existingEmpleados.map(emp => emp.cedula));
 
-    let nuevos = 0;
-    let actualizados = 0;
+    const nuevosEmpleados = [];
+    const empleadosActualizados = [];
 
     const empleadosWithIds = await Promise.all(empleadosToInsert.map(async (emp) => {
-        // Lógica para contar nuevos y actualizados
-        if (existingCedulas.has(emp.cedula)) {
-            actualizados++;
-        } else {
-            nuevos++;
-        }
-
         const empresaUuid = await findOrCreateId('empresas', emp.empresa_id);
         const sedeUuid = await findOrCreateId('sedes', emp.sede_id);
         
-        return {
+        const empleadoData = {
             cedula: emp.cedula,
             nombre_completo: emp.nombre_completo,
             rol: emp.rol,
@@ -130,24 +123,40 @@ export const uploadEmpleados = async (req, res) => {
             sede_id: sedeUuid,
             estado: 'activo'
         };
+
+        if (existingCedulas.has(emp.cedula)) {
+            empleadosActualizados.push(empleadoData);
+        } else {
+            nuevosEmpleados.push(empleadoData);
+        }
+        return empleadoData;
     }));
 
-    // Usa upsert para insertar o actualizar registros, evitando el error de duplicado.
-    const { error } = await supabaseAxios.post(
-      '/empleados', 
-      empleadosWithIds,
-      {
-        params: {
-          on_conflict: 'cedula' // Clave única para el upsert
-        }
-      }
-    );
+    let nuevos = 0;
+    let actualizados = 0;
 
-    if (error) {
-        if (error.code === '23505') {
-            return res.status(409).json({ message: 'Ya existe un empleado con esa cédula.' });
-        }
-        throw error;
+    // Insertar nuevos empleados
+    if (nuevosEmpleados.length > 0) {
+        const { error } = await supabaseAxios.post(
+            '/empleados', 
+            nuevosEmpleados,
+            {
+              params: {
+                on_conflict: 'cedula'
+              }
+            }
+        );
+        if (error) throw error;
+        nuevos = nuevosEmpleados.length;
+    }
+    
+    // Actualizar empleados existentes
+    if (empleadosActualizados.length > 0) {
+        await Promise.all(empleadosActualizados.map(async (emp) => {
+            const { error } = await supabaseAxios.patch(`/empleados?cedula=eq.${emp.cedula}`, emp);
+            if (error) throw error;
+        }));
+        actualizados = empleadosActualizados.length;
     }
     
     res.status(200).json({
