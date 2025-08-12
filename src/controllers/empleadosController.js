@@ -1,30 +1,17 @@
 // src/controllers/empleadosController.js
 import { supabaseAxios } from '../services/supabaseAxios.js';
 import { Buffer } from 'buffer';
+import xlsx from 'xlsx';
 
-// Lógica para parsear archivos CSV o XLSX.
-// Nota: Deberás instalar librerías como 'csv-parser' o 'xlsx'
-// para manejar archivos de producción. Este es un ejemplo simplificado.
+// Lógica para parsear archivos CSV o XLSX usando la librería 'xlsx'.
 const parseFile = async (file) => {
   return new Promise((resolve, reject) => {
-    // Si el archivo es un buffer (como en Multer), lo procesamos.
-    // Aquí se asume que el archivo tiene un formato que se puede convertir a string.
     try {
-      const data = file.buffer.toString('utf8');
-      
-      // En este ejemplo, asumimos que es un CSV con una estructura conocida.
-      // En una aplicación real, usarías una librería de parseo.
-      const lines = data.trim().split('\n');
-      const headers = lines[0].split(',');
-      const result = lines.slice(1).map(line => {
-        const values = line.split(',');
-        return headers.reduce((obj, header, index) => {
-          obj[header.trim()] = values[index].trim();
-          return obj;
-        }, {});
-      });
-
-      resolve(result);
+      const workbook = xlsx.read(file.buffer, { type: 'buffer' });
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const data = xlsx.utils.sheet_to_json(worksheet);
+      resolve(data);
     } catch (e) {
       reject(new Error('Error al parsear el archivo: ' + e.message));
     }
@@ -117,10 +104,25 @@ export const uploadEmpleados = async (req, res) => {
     
     const empleadosToInsert = await parseFile(file);
 
+    // Mapea y procesa los datos para encontrar o crear empresa/sede
+    const empleadosWithIds = await Promise.all(empleadosToInsert.map(async (emp) => {
+        const empresaUuid = await findOrCreateId('empresas', emp.empresa_id);
+        const sedeUuid = await findOrCreateId('sedes', emp.sede_id);
+        
+        return {
+            cedula: emp.cedula,
+            nombre_completo: emp.nombre_completo,
+            rol: emp.rol,
+            empresa_id: empresaUuid,
+            sede_id: sedeUuid,
+            estado: 'activo'
+        };
+    }));
+
     // Usa upsert para insertar o actualizar registros, evitando el error de duplicado.
     const { data, error } = await supabaseAxios.post(
       '/empleados', 
-      empleadosToInsert.map(emp => ({ ...emp, estado: 'activo' })),
+      empleadosWithIds,
       {
         params: {
           on_conflict: 'cedula' // Clave única para el upsert
