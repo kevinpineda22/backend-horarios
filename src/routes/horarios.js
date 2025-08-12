@@ -16,12 +16,13 @@ router.get('/:empleado_id', ctrl.getHorariosByEmpleadoId);
 
 /**
  * POST /api/horarios
- * Crea un nuevo horario SEMANAL automático.
- * Body esperado:
+ * Crea un nuevo horario SEMANAL automático (44h base, sin extras).
+ * Body:
  * {
- *   empleado_id: "<uuid del empleado>",
- *   fecha_inicio: "YYYY-MM-DD",  // debe ser lunes
- *   extras: <número de horas extra entre 0 y 12>
+ *   empleado_id: "<uuid>",
+ *   fecha_inicio: "YYYY-MM-DD",
+ *   fecha_fin: "YYYY-MM-DD",
+ *   working_weekdays: [2,3,4,5,6] // Ej: Mar–Sáb. Lun..Dom => 1..7
  * }
  */
 router.post('/', ctrl.createHorario);
