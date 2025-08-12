@@ -2,17 +2,32 @@
 import { supabaseAxios } from '../services/supabaseAxios.js';
 import { Buffer } from 'buffer';
 
-// Simula la lógica de parseo de CSV o XLSX
-const parseFile = (file) => {
+// Lógica para parsear archivos CSV o XLSX.
+// Nota: Deberás instalar librerías como 'csv-parser' o 'xlsx'
+// para manejar archivos de producción. Este es un ejemplo simplificado.
+const parseFile = async (file) => {
   return new Promise((resolve, reject) => {
-    // Aquí iría la lógica real para parsear un archivo
-    // Por simplicidad, este es un array de ejemplo.
-    // En un entorno real, usarías librerías como 'csv-parser' o 'xlsx'
-    const mockData = [
-      { cedula: '12345678', nombre_completo: 'Nuevo Empleado 1', rol: 'Operario' },
-      { cedula: '87654321', nombre_completo: 'Nuevo Empleado 2', rol: 'Logística' },
-    ];
-    resolve(mockData);
+    // Si el archivo es un buffer (como en Multer), lo procesamos.
+    // Aquí se asume que el archivo tiene un formato que se puede convertir a string.
+    try {
+      const data = file.buffer.toString('utf8');
+      
+      // En este ejemplo, asumimos que es un CSV con una estructura conocida.
+      // En una aplicación real, usarías una librería de parseo.
+      const lines = data.trim().split('\n');
+      const headers = lines[0].split(',');
+      const result = lines.slice(1).map(line => {
+        const values = line.split(',');
+        return headers.reduce((obj, header, index) => {
+          obj[header.trim()] = values[index].trim();
+          return obj;
+        }, {});
+      });
+
+      resolve(result);
+    } catch (e) {
+      reject(new Error('Error al parsear el archivo: ' + e.message));
+    }
   });
 };
 
@@ -95,13 +110,11 @@ export const createEmpleado = async (req, res) => {
  */
 export const uploadEmpleados = async (req, res) => {
   try {
-    // La lógica de multer para manejar el archivo ya debe estar configurada en el middleware.
     const file = req.file;
     if (!file) {
       return res.status(400).json({ message: 'No se encontró ningún archivo.' });
     }
     
-    // Simular el parseo del archivo para obtener los datos de los empleados
     const empleadosToInsert = await parseFile(file);
 
     // Usa upsert para insertar o actualizar registros, evitando el error de duplicado.
@@ -124,10 +137,6 @@ export const uploadEmpleados = async (req, res) => {
     
     let nuevos = 0;
     let actualizados = 0;
-
-    // Supabase no devuelve directamente cuántos se crearon y cuántos se actualizaron.
-    // Aquí se necesita una lógica más avanzada si es necesario.
-    // Por ahora, asumimos que todos los registros se procesaron.
     nuevos = data.length;
     
     res.status(200).json({
