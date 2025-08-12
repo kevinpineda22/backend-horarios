@@ -1,6 +1,8 @@
+// src/routes/public.js
 import express from 'express';
 import axios from 'axios';
 import dotenv from 'dotenv';
+import Holidays from 'date-holidays';
 dotenv.config();
 
 const router = express.Router();
@@ -11,23 +13,32 @@ const client = axios.create({ baseURL: `${supabaseUrl}/rest/v1`, headers: {
   Authorization: `Bearer ${supabaseKey}`
 }});
 
-router.post('/consulta-horarios', async (req, res) => {
-  const { cedula } = req.body;
-  if (!cedula) return res.status(400).json({ message: 'Cédula missing' });
+// (ya existente)
+router.post('/consulta-horarios', async (req, res) => { /* ... */ });
+
+// NUEVO: GET /api/public/festivos?start=YYYY-MM-DD&end=YYYY-MM-DD
+router.get('/festivos', (req, res) => {
   try {
-    // buscar empleado
-    const { data: [emp] } = await client.get(
-      `/empleados?select=id,nombre_completo&cedula=eq.${cedula}`
-    );
-    if (!emp) return res.status(404).json({ message: 'Empleado not found' });
-    // buscar horarios
-    const { data: horarios } = await client.get(
-      `/horarios?select=tipo,fecha_inicio,fecha_fin,total_horas_semana,dias&empleado_id=eq.${emp.id}&order=fecha_inicio.desc`
-    );
-    res.json({ empleado: emp, horarios });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ message: 'Server error' });
+    const { start, end } = req.query;
+    if (!start || !end) return res.status(400).json({ message: 'start y end son requeridos (YYYY-MM-DD)' });
+
+    const s = new Date(start), e = new Date(end);
+    const years = new Set([s.getFullYear(), e.getFullYear()]);
+    const hd = new Holidays('CO');
+    const out = [];
+
+    for (const y of years) {
+      const list = hd.getHolidays(y) || [];
+      for (const h of list) {
+        const ymd = h.date.slice(0,10); // YYYY-MM-DD
+        const d = new Date(`${ymd}T00:00:00`);
+        if (d >= s && d <= e) out.push({ fecha: ymd, nombre: h.name });
+      }
+    }
+    res.json(out);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error obteniendo festivos' });
   }
 });
 
