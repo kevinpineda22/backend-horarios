@@ -104,8 +104,21 @@ export const uploadEmpleados = async (req, res) => {
     
     const empleadosToInsert = await parseFile(file);
 
-    // Mapea y procesa los datos para encontrar o crear empresa/sede
+    // Obtener todas las cédulas de los empleados existentes
+    const { data: existingEmpleados } = await supabaseAxios.get('/empleados?select=cedula');
+    const existingCedulas = new Set(existingEmpleados.map(emp => emp.cedula));
+
+    let nuevos = 0;
+    let actualizados = 0;
+
     const empleadosWithIds = await Promise.all(empleadosToInsert.map(async (emp) => {
+        // Lógica para contar nuevos y actualizados
+        if (existingCedulas.has(emp.cedula)) {
+            actualizados++;
+        } else {
+            nuevos++;
+        }
+
         const empresaUuid = await findOrCreateId('empresas', emp.empresa_id);
         const sedeUuid = await findOrCreateId('sedes', emp.sede_id);
         
@@ -120,7 +133,7 @@ export const uploadEmpleados = async (req, res) => {
     }));
 
     // Usa upsert para insertar o actualizar registros, evitando el error de duplicado.
-    const { data, error } = await supabaseAxios.post(
+    const { error } = await supabaseAxios.post(
       '/empleados', 
       empleadosWithIds,
       {
@@ -137,14 +150,10 @@ export const uploadEmpleados = async (req, res) => {
         throw error;
     }
     
-    let nuevos = 0;
-    let actualizados = 0;
-    nuevos = data.length;
-    
     res.status(200).json({
       message: 'Empleados procesados con éxito.',
       nuevos,
-      actualizados: 0 // Valor de marcador de posición
+      actualizados
     });
   } catch (e) {
     console.error(e);
