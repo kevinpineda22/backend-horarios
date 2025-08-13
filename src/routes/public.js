@@ -86,4 +86,5 @@ router.post('/consulta-horarios', async (req, res) => {
   }
 });
 
+
 export default router;
