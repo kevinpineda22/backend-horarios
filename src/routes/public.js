@@ -13,8 +13,6 @@ const client = axios.create({
   headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` }
 });
 
-// ... (tu ruta /consulta-horarios se mantiene)
-
 // GET /api/public/festivos?start=YYYY-MM-DD&end=YYYY-MM-DD
 router.get('/festivos', (req, res) => {
   try {
@@ -27,7 +25,6 @@ router.get('/festivos', (req, res) => {
     const years = new Set([s.getFullYear(), e.getFullYear()]);
 
     const hd = new Holidays('CO');
-    // 🔤 forzar nombres en español (siempre que el país tenga traducción)
     if (typeof hd.setLanguages === 'function') {
       hd.setLanguages('es');
     }
@@ -36,16 +33,15 @@ router.get('/festivos', (req, res) => {
     for (const y of years) {
       const list = hd.getHolidays(y) || [];
       for (const h of list) {
-        // h.date formato ISO “YYYY-MM-DD …”
         const ymd = h.date.slice(0, 10);
         const d = new Date(`${ymd}T00:00:00`);
         if (d >= s && d <= e) {
           out.push({
             fecha: ymd,
-            nombre: h.name,          // ← razón (en español si disponible)
-            tipo: h.type || null,    // 'public', 'bank', 'observance', etc.
+            nombre: h.name,
+            tipo: h.type || null,
             trasladado: !!h.substitute,
-            regla: h.rule || null    // p.ej. "monday after 2025-01-06"
+            regla: h.rule || null
           });
         }
       }
@@ -54,6 +50,39 @@ router.get('/festivos', (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Error obteniendo festivos' });
+  }
+});
+
+// NUEVA RUTA PARA LA CONSULTA PÚBLICA DE HORARIOS
+// POST /api/public/consulta-horarios
+router.post('/consulta-horarios', async (req, res) => {
+  const { cedula } = req.body;
+  if (!cedula) {
+    return res.status(400).json({ message: 'La cédula es requerida.' });
+  }
+
+  try {
+    // 1. Buscar al empleado por cédula
+    const { data: empleadosData, error: empleadosError } = await client.get(`/empleados?cedula=eq.${cedula}&select=id,nombre_completo,estado`);
+    if (empleadosError) throw empleadosError;
+
+    const empleado = empleadosData[0];
+    if (!empleado) {
+      return res.status(404).json({ message: 'Empleado no encontrado.' });
+    }
+    if (empleado.estado !== 'activo') {
+      return res.status(403).json({ message: 'El empleado se encuentra inactivo.' });
+    }
+
+    // 2. Obtener los horarios del empleado
+    const { data: horariosData, error: horariosError } = await client.get(`/horarios?empleado_id=eq.${empleado.id}&order=fecha_inicio.desc`);
+    if (horariosError) throw horariosError;
+
+    // 3. Devolver el empleado y sus horarios
+    res.json({ empleado, horarios: horariosData || [] });
+  } catch (e) {
+    console.error('Error en la consulta pública de horarios:', e);
+    res.status(500).json({ message: 'Error en la consulta. Intenta de nuevo más tarde.' });
   }
 });
 
