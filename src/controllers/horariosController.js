@@ -24,11 +24,9 @@ export const createHorario = async (req, res) => {
       return res.status(400).json({ message: 'working_weekdays es requerido (array de 1..7; 1=Lun).' });
     }
 
-    // Festivos en el rango
     const holidaySet = getHolidaySet(fecha_inicio, fecha_fin);
     const workedHolidaySet = new Set((worked_holidays || []).map(String));
 
-    // Genera base 8h/día (5h festivo trabajado) + intenta extras 12h/semana
     const { schedules, warnings } = generateScheduleForRange(
       fecha_inicio,
       fecha_fin,
@@ -61,17 +59,13 @@ export const updateHorario = async (req, res) => {
   const { id } = req.params;
   const p = req.body;
   try {
-    // Trae el horario actual (por si se requiere contexto)
     const { data: [current] } = await supabaseAxios.get(`/horarios?select=*&id=eq.${id}`);
     if (!current) return res.status(404).json({ message: 'Horario no encontrado' });
 
     const newDias = p.dias || current.dias;
 
-    // Validaciones básicas:
-    // - Total día = base + extra
-    // - No exceder capacidad diaria
-    // - Extras semanales ≤ 12h (suma)
-    const byWeek = new Map(); // key = weekStartYMD, value = { extrasSum }
+    // Validaciones: total día = base + extra; capacidad diaria; extras semanales ≤ 12h
+    const byWeek = new Map();
     for (const d of newDias) {
       const wdDate = new Date(d.fecha);
       const wd = isoWeekday(wdDate);
@@ -101,7 +95,6 @@ export const updateHorario = async (req, res) => {
       }
     }
 
-    // Recalcular total_horas_semana
     const totalSemana = newDias.reduce((s,x)=> s + Number(x.horas || 0), 0);
 
     await supabaseAxios.patch(`/horarios?id=eq.${id}`, {

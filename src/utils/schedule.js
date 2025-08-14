@@ -13,119 +13,117 @@ export const addDays = (d, n) => dfAddDays(new Date(d), n);
 export const startOfISOWeek = (d) => dfStartOfWeek(new Date(d), { weekStartsOn: 1 });
 export const isoWeekday = (d) => { const wd = new Date(d).getDay(); return wd === 0 ? 7 : wd; }; // 1..7
 
-// Horario de apertura del establecimiento:
-// L–V: 07:00–18:00 (capacidad 10h netas para trabajo efectivo)
-// Sábado: 07:00–15:00 (capacidad 8h netas)
-// Domingo: cerrado (0)
+// Capacidad "trabajable" (en horas exactas) por día
+// L–V: 10h netas (07–12 y 13–18) => 10
+// Sáb: 8h netas (07–15 continuas) => 8
+// Dom: 0
 export function getDailyCapacity(weekday) {
   if (weekday >= 1 && weekday <= 5) return 10; // Lun-Vie
-  if (weekday === 6) return 8; // Sábado (07–15)
+  if (weekday === 6) return 8; // Sábado (07–15, 8h exactas)
   return 0; // Domingo
 }
 
-// Objetivo base por día (obligatoria):
-// - Días normales (L–S): 8h
+// Objetivo base por día (en horas exactas):
+// - Día normal L–S: 8h
 // - Festivo trabajado: 5h (08:00–13:00 fijas)
-// - Festivo NO trabajado: 0h
+// - Festivo no trabajado: 0h
 const BASE_NORMAL_DAY = 8;
 const BASE_HOLIDAY_WORKED = 5;
 
-// Extras objetivo por semana:
+// Extras objetivo por semana (en horas exactas)
 const WEEKLY_EXTRA_TARGET = 12;
 
-// Ventanas recomendadas para construir bloques (enfoque mañana)
+// Horario del establecimiento
 const OPENING = {
   weekday: { start: '07:00', lunchStart: '12:00', lunchEnd: '13:00', end: '18:00' },
-  saturday: { start: '07:00', lunchStart: '12:00', lunchEnd: '12:30', end: '15:00' },
+  saturday: { start: '07:00', end: '15:00' }, // continuo 8h
 };
 
 // ================== Utils de tiempo ==================
 const toDateAt = (ymd, hhmm) => new Date(`${ymd}T${hhmm}:00`);
-const diffH = (a,b) => (b - a) / (1000*60*60);
-const addMinutes = (date, minutes) => new Date(date.getTime() + minutes*60000);
-const clamp = (x, min, max) => Math.max(min, Math.min(max, x));
+const addHours = (date, h) => new Date(date.getTime() + h*3600*1000);
 
-// Random en múltiplos de 15m
-function randomStartBetween(ymd, fromHHMM, toHHMM) {
-  const from = toDateAt(ymd, fromHHMM);
-  const to = toDateAt(ymd, toHHMM);
-  const steps = Math.floor((to - from) / (15*60000));
-  const k = steps > 0 ? Math.floor(Math.random() * (steps + 1)) : 0;
-  return addMinutes(from, k*15);
+// Random start en horas enteras
+function randomStartHour(ymd, options /* array de 'HH:00' */) {
+  const idx = Math.floor(Math.random() * options.length);
+  return toDateAt(ymd, options[idx]);
 }
 
-// Crea bloques priorizando mañana: [start .. lunchStart] y [lunchEnd .. end],
-// respetando base + extra, sin exceder capacidad ni horario del establecimiento.
+// Construye bloques en horas exactas. Sin decimales.
 function buildDayBlocks({ ymd, weekday, baseHours, extraHours, isWorkedHoliday }) {
   const blocks = [];
-  if (baseHours + extraHours <= 0) return { blocks, usedBase: 0, usedExtra: 0 };
+  let usedBase = 0;
+  let usedExtra = 0;
 
-  // Festivo trabajado: bloque fijo 08:00–13:00 (5h), sin extras ese día.
+  // Festivo trabajado: fijo 08:00–13:00 (5h), sin extras.
   if (isWorkedHoliday) {
-    const s = toDateAt(ymd, '08:00');
-    const e = toDateAt(ymd, '13:00');
-    return {
-      blocks: [{ start: s.toISOString(), end: e.toISOString(), hours: 5 }],
-      usedBase: 5,
-      usedExtra: 0
-    };
+    if (baseHours > 0) {
+      const s = toDateAt(ymd, '08:00');
+      const e = toDateAt(ymd, '13:00');
+      blocks.push({ start: s.toISOString(), end: e.toISOString(), hours: 5 });
+      usedBase = 5;
+    }
+    return { blocks, usedBase, usedExtra };
   }
 
-  const isSat = weekday === 6;
-  const W = isSat ? OPENING.saturday : OPENING.weekday;
+  // Sábado: 07:00–15:00 (8h continuas), sin extras
+  if (weekday === 6) {
+    if (baseHours > 0) {
+      const s = toDateAt(ymd, OPENING.saturday.start);
+      const e = toDateAt(ymd, OPENING.saturday.end);
+      blocks.push({ start: s.toISOString(), end: e.toISOString(), hours: 8 });
+      usedBase = Math.min(8, baseHours); // debería ser 8 exacto
+    }
+    return { blocks, usedBase, usedExtra };
+  }
 
-  // Entrada aleatoria en la mañana para repartir picos (07:00–08:30 en L–V; 07:00–07:45 en Sáb)
-  const startRand = isSat
-    ? randomStartBetween(ymd, '07:00', '07:45')
-    : randomStartBetween(ymd, '07:00', '08:30');
+  // L–V: entrada aleatoria en hora exacta 07:00 / 08:00 / 09:00
+  const start = randomStartHour(ymd, ['07:00', '08:00', '09:00']);
+  const lunchStart = toDateAt(ymd, OPENING.weekday.lunchStart);
+  const lunchEnd   = toDateAt(ymd, OPENING.weekday.lunchEnd);
+  const dayEnd     = toDateAt(ymd, OPENING.weekday.end);
 
-  const lunchStart = toDateAt(ymd, W.lunchStart);
-  const lunchEnd = toDateAt(ymd, W.lunchEnd);
-  const dayEnd = toDateAt(ymd, W.end);
+  let remainingBase = Math.max(0, Math.floor(baseHours));  // entero
+  let remainingExtra = Math.max(0, Math.floor(extraHours)); // entero
 
-  let remainingBase = baseHours;
-  let remainingExtra = extraHours;
-
-  // === Bloque mañana ===
-  if (startRand < lunchStart && remainingBase > 0) {
-    const morningCap = diffH(startRand, lunchStart);
-    const usedMorningBase = clamp(remainingBase, 0, morningCap);
-    if (usedMorningBase > 0) {
-      const mEnd = addMinutes(startRand, usedMorningBase * 60);
-      blocks.push({ start: startRand.toISOString(), end: mEnd.toISOString(), hours: usedMorningBase });
-      remainingBase -= usedMorningBase;
+  // --- Mañana (hasta 12:00) ---
+  if (start < lunchStart && remainingBase > 0) {
+    const morningCap = Math.floor((lunchStart - start) / (3600*1000)); // horas enteras
+    const use = Math.min(remainingBase, morningCap);
+    if (use > 0) {
+      const end = addHours(start, use);
+      blocks.push({ start: start.toISOString(), end: end.toISOString(), hours: use });
+      remainingBase -= use;
     }
   }
 
-  // === Bloque tarde (primero base, luego extras) ===
-  let current = lunchEnd;
-
-  // Base por la tarde (si faltó completar las 8h de base)
-  if (remainingBase > 0 && current < dayEnd) {
-    const afternoonCap = diffH(current, dayEnd);
-    const usedAfBase = clamp(remainingBase, 0, afternoonCap);
-    if (usedAfBase > 0) {
-      const afEnd = addMinutes(current, usedAfBase * 60);
-      blocks.push({ start: current.toISOString(), end: afEnd.toISOString(), hours: usedAfBase });
-      current = afEnd;
-      remainingBase -= usedAfBase;
+  // --- Tarde base (13:00..18:00) ---
+  let cursor = lunchEnd;
+  if (remainingBase > 0 && cursor < dayEnd) {
+    const afternoonCap = Math.floor((dayEnd - cursor) / (3600*1000));
+    const use = Math.min(remainingBase, afternoonCap);
+    if (use > 0) {
+      const end = addHours(cursor, use);
+      blocks.push({ start: cursor.toISOString(), end: end.toISOString(), hours: use });
+      cursor = end;
+      remainingBase -= use;
     }
   }
 
-  // Extras por la tarde
-  if (remainingExtra > 0 && current < dayEnd) {
-    const extraCap = diffH(current, dayEnd);
-    const usedAfExtra = clamp(remainingExtra, 0, extraCap);
-    if (usedAfExtra > 0) {
-      const exEnd = addMinutes(current, usedAfExtra * 60);
-      blocks.push({ start: current.toISOString(), end: exEnd.toISOString(), hours: usedAfExtra });
-      current = exEnd;
-      remainingExtra -= usedAfExtra;
+  usedBase = Math.max(0, Math.floor(baseHours)) - remainingBase;
+
+  // --- Tarde extras (en horas enteras) ---
+  if (remainingExtra > 0 && cursor < dayEnd) {
+    const extraCap = Math.floor((dayEnd - cursor) / (3600*1000));
+    const use = Math.min(remainingExtra, extraCap);
+    if (use > 0) {
+      const end = addHours(cursor, use);
+      blocks.push({ start: cursor.toISOString(), end: end.toISOString(), hours: use });
+      cursor = end;
+      remainingExtra -= use;
+      usedExtra = use;
     }
   }
-
-  const usedBase = baseHours - remainingBase;
-  const usedExtra = extraHours - remainingExtra;
 
   return { blocks, usedBase, usedExtra };
 }
@@ -140,7 +138,7 @@ function generateWeek({
   workedHolidaySet,
   warnings,
 }) {
-  // Construir días candidatos dentro del subrango
+  // Días del subrango de esa semana
   const days = [];
   for (let i = 0; i < 7; i++) {
     const d = addDays(weekStart, i);
@@ -151,31 +149,20 @@ function generateWeek({
     const isWorkedHoliday = workedHolidaySet.has(ymd);
     const isWorking = workingWeekdays.includes(wd);
 
-    // Si es festivo NO trabajado => 0h
-    // Si es festivo trabajado => 5h fijas
-    // Si normal => 8h base
     let baseTarget = 0;
-    if (isWorking && !isHoliday) baseTarget = BASE_NORMAL_DAY;
-    if (isHoliday && isWorkedHoliday) baseTarget = BASE_HOLIDAY_WORKED;
+    if (isWorking && !isHoliday) baseTarget = BASE_NORMAL_DAY;           // 8h
+    if (isHoliday && isWorkedHoliday) baseTarget = BASE_HOLIDAY_WORKED;  // 5h
 
     const cap = getDailyCapacity(wd);
     days.push({ ymd, wd, isHoliday, isWorkedHoliday, isWorking, baseTarget, cap });
   }
 
-  // Asignar BASE y luego EXTRAS por la semana
+  // 1) Asignar BASE (enteros)
   const outDays = [];
   let sumBase = 0;
-  let sumExtra = 0;
-
-  // 1) BASE (8h normales, 5h festivo trabajado)
   for (const d of days) {
-    let base = Math.min(d.baseTarget, d.cap);
-    let extraTargetToday = 0; // luego lo llenamos
-    let extraUsed = 0;
-
-    // Capacidad restante para extras (solo si no es sábado o si sobra ventana; sábado cap = 8 => 0 extras)
-    const capacityLeft = Math.max(0, d.cap - base);
-    // guardamos para usar en el paso 2
+    const base = Math.min(d.baseTarget, d.cap);
+    const capacityLeft = Math.max(0, d.cap - base); // para extras
     outDays.push({
       ymd: d.ymd,
       wd: d.wd,
@@ -183,31 +170,27 @@ function generateWeek({
       isWorkedHoliday: d.isWorkedHoliday,
       cap: d.cap,
       base,
-      extraTargetToday,
       capacityLeft,
+      extraTargetToday: 0,
       blocks: [],
     });
     sumBase += base;
   }
 
-  // 2) EXTRAS: objetivo 12h/semana, priorizar L–V y tardes
+  // 2) Repartir EXTRAS semanales: 12h, solo en días NO festivos (L–V)
   let extrasLeft = WEEKLY_EXTRA_TARGET;
-
-  // Orden de preferencia: L–V no festivo (wd 1..5 & !isHoliday)
-  const prefOrder = outDays
-    .filter(d => d.wd >= 1 && d.wd <= 5 && !d.isHoliday) // días hábiles normales
-    .concat(outDays.filter(d => d.wd >= 1 && d.wd <= 5 && d.isWorkedHoliday === true)) // si quisieras permitir extra en festivo trabajado, muévelo aquí
-    .concat(outDays.filter(d => d.wd === 6)); // sábado al final (cap suele ser 0 extra)
-
-  for (const d of prefOrder) {
+  const pref = outDays
+    .filter(d => d.wd >= 1 && d.wd <= 5 && !d.isHoliday); // L–V no festivo
+  for (const d of pref) {
     if (extrasLeft <= 0) break;
     if (d.capacityLeft <= 0) continue;
-    const use = Math.min(d.capacityLeft, extrasLeft);
+    const use = Math.min(d.capacityLeft, extrasLeft); // en enteros
     d.extraTargetToday = use;
     extrasLeft -= use;
   }
 
-  // 3) Construir bloques reales (random de mañana + tarde fija + extra tarde)
+  // 3) Construir bloques en horas enteras
+  let sumExtra = 0;
   for (const d of outDays) {
     const { blocks, usedBase, usedExtra } = buildDayBlocks({
       ymd: d.ymd,
@@ -217,42 +200,34 @@ function generateWeek({
       isWorkedHoliday: d.isWorkedHoliday
     });
 
-    const horas_base = usedBase;
-    const horas_extra = usedExtra;
+    const horas_base = usedBase;          // enteros
+    const horas_extra = usedExtra;        // enteros
     const horas = horas_base + horas_extra;
 
     sumExtra += horas_extra;
 
-    outDays[ outDays.findIndex(x => x.ymd === d.ymd) ] = {
-      ...d,
-      base: horas_base,
-      extraTargetToday: horas_extra,
-      blocks,
+    Object.assign(d, {
       horas_base,
       horas_extra,
       horas,
-      descripcion: '' // opcional
-    };
+      blocks,
+      descripcion: ''
+    });
   }
 
-  const total = outDays.reduce((s,d) => s + (d.horas || 0), 0);
+  const total = outDays.reduce((s,d)=> s + (d.horas || 0), 0);
 
-  // Warnings: si no alcanzamos 56h (44 + 12) por capacidad / festivos no trabajados
-  if (total < (BASE_NORMAL_DAY * 5 +  // suposición de 5 días hábiles de 8h
-               (outDays.find(x => x.wd === 6) ? BASE_NORMAL_DAY : 0) + // si hay sábado operativo: +8h
-               WEEKLY_EXTRA_TARGET)) {
-    warnings.push(`Semana ${YMD(weekStart)}: no se alcanzan 56h. Se programaron ${total}h (base ${sumBase} + extra ${sumExtra}).`);
-  }
+  // Warnings si no alcanzamos objetivo típico (por ejemplo 56h) o extras<12
+  // Nota: dejamos el warning informativo, pero la semana igual se crea.
   if (sumExtra < WEEKLY_EXTRA_TARGET) {
     warnings.push(`Semana ${YMD(weekStart)}: extras asignadas ${sumExtra}h (objetivo 12h).`);
   }
 
-  // Empaquetar salida compatible con BD
   const dias = outDays.map(d => ({
     descripcion: d.descripcion,
     fecha: d.ymd,
-    start: d.blocks.length ? d.blocks[0].start.slice(0,10) : d.ymd, // para allDay fallback
-    end: d.blocks.length ? d.blocks[d.blocks.length-1].end.slice(0,10) : d.ymd,
+    start: d.blocks.length ? d.blocks[0].start.slice(0,10) : d.ymd,
+    end:   d.blocks.length ? d.blocks[d.blocks.length-1].end.slice(0,10) : d.ymd,
     horas_base: d.horas_base,
     horas_extra: d.horas_extra,
     horas: d.horas,
@@ -265,10 +240,10 @@ function generateWeek({
 // ================== API principal ==================
 /**
  * Genera horarios semanales dentro del rango [startDate, endDate]
- * - Base diaria: 8h reales (Sáb 8h). Festivo trabajado: 5h (08–13).
- * - Extras objetivo: 12h/semana (si no alcanza, warning).
+ * - Base diaria: 8h exactas (Sáb 8h). Festivo trabajado: 5h exactas.
+ * - Extras objetivo: 12h/semana (enteras; si no alcanza, warning).
  * - Festivos NO trabajados se omiten.
- * - Bloques con entrada aleatoria y foco mañana.
+ * - Bloques con entrada aleatoria a hora exacta y foco mañana.
  */
 export function generateScheduleForRange(startDate, endDate, workingWeekdays, holidaySet, workedHolidaySet = new Set()) {
   const schedules = [];
