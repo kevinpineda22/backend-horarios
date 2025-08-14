@@ -1,8 +1,6 @@
 // src/controllers/horariosController.js
 import { supabaseAxios } from '../services/supabaseAxios.js';
-import {
-  generateScheduleForRange,
-} from '../utils/schedule.js';
+import { generateScheduleForRange, getDailyCapacity, isoWeekday, startOfISOWeek } from '../utils/schedule.js';
 import { getHolidaySet } from '../utils/holidays.js';
 
 export const getHorariosByEmpleadoId = async (req, res) => {
@@ -26,13 +24,12 @@ export const createHorario = async (req, res) => {
       return res.status(400).json({ message: 'working_weekdays es requerido (array de 1..7; 1=Lun).' });
     }
 
-    // Festivos Colombia en el rango
+    // Festivos en el rango
     const holidaySet = getHolidaySet(fecha_inicio, fecha_fin);
-    // Festivos que el usuario decidió trabajar
-    const workedHolidaySet = new Set(worked_holidays || []);
+    const workedHolidaySet = new Set((worked_holidays || []).map(String));
 
-    // Genera semanas con objetivo 56h (base diaria 7.3h; sáb 7h; extras 12h/sem)
-    const { weeks, warnings } = generateScheduleForRange(
+    // Genera base 8h/día (5h festivo trabajado) + intenta extras 12h/semana
+    const { schedules, warnings } = generateScheduleForRange(
       fecha_inicio,
       fecha_fin,
       working_weekdays,
@@ -40,24 +37,23 @@ export const createHorario = async (req, res) => {
       workedHolidaySet
     );
 
-    const payload = weeks.map(sem => ({
+    const payload = schedules.map(horario => ({
       empleado_id,
       lider_id,
       tipo: 'semanal',
-      fecha_inicio: sem.fecha_inicio,
-      fecha_fin: sem.fecha_fin,
-      dias: sem.dias,
-      total_horas_semana: sem.total_horas_semana
+      fecha_inicio: horario.fecha_inicio,
+      fecha_fin: horario.fecha_fin,
+      dias: horario.dias,
+      total_horas_semana: horario.total_horas_semana
     }));
 
     const { data, error } = await supabaseAxios.post('/horarios', payload);
     if (error) throw error;
 
-    return res.status(201).json({ created: data, warnings });
-
+    res.status(201).json({ created: data, warnings });
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'Error creating horario', error: e.message });
+    res.status(500).json({ message: 'Error creating horario', error: e.message });
   }
 };
 
@@ -65,20 +61,22 @@ export const updateHorario = async (req, res) => {
   const { id } = req.params;
   const p = req.body;
   try {
-    // Trae el horario actual
+    // Trae el horario actual (por si se requiere contexto)
     const { data: [current] } = await supabaseAxios.get(`/horarios?select=*&id=eq.${id}`);
     if (!current) return res.status(404).json({ message: 'Horario no encontrado' });
 
     const newDias = p.dias || current.dias;
 
-    // Validaciones suaves:
-    // - extra >= 0
-    // - horas = base + extra
-    // - extras semanales <= 12
-    // - (dejamos de exigir base exacta 44h por semana; ahora la base diaria objetivo es 7.3h,
-    //   pero puede no alcanzarse por capacidad/festivos; el generador ya advierte)
-    let weeklyExtras = 0;
+    // Validaciones básicas:
+    // - Total día = base + extra
+    // - No exceder capacidad diaria
+    // - Extras semanales ≤ 12h (suma)
+    const byWeek = new Map(); // key = weekStartYMD, value = { extrasSum }
     for (const d of newDias) {
+      const wdDate = new Date(d.fecha);
+      const wd = isoWeekday(wdDate);
+      const cap = getDailyCapacity(wd);
+
       const base  = Number(d.horas_base || 0);
       const extra = Number(d.horas_extra || 0);
       const total = Number(d.horas || (base + extra));
@@ -87,13 +85,23 @@ export const updateHorario = async (req, res) => {
       if (Math.abs(total - (base + extra)) > 1e-6) {
         return res.status(400).json({ message: `Total del día debe ser base + extra en ${d.fecha}` });
       }
-      weeklyExtras += extra;
+      if (total > cap + 1e-6) {
+        return res.status(400).json({ message: `Capacidad diaria excedida (${cap}h) en ${d.fecha}` });
+      }
+
+      const weekStart = startOfISOWeek(wdDate);
+      const key = weekStart.toISOString().slice(0,10);
+      if (!byWeek.has(key)) byWeek.set(key, { extrasSum: 0 });
+      byWeek.get(key).extrasSum += extra;
     }
 
-    if (weeklyExtras > 12 + 1e-6) {
-      return res.status(400).json({ message: `Máximo 12h extra por semana.` });
+    for (const [week, agg] of byWeek.entries()) {
+      if (agg.extrasSum > 12 + 1e-6) {
+        return res.status(400).json({ message: `Máximo 12h extra por semana (semana ${week}).` });
+      }
     }
 
+    // Recalcular total_horas_semana
     const totalSemana = newDias.reduce((s,x)=> s + Number(x.horas || 0), 0);
 
     await supabaseAxios.patch(`/horarios?id=eq.${id}`, {
