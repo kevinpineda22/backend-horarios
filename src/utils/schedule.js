@@ -7,213 +7,199 @@ import {
 } from 'date-fns';
 
 const pad = (n) => String(n).padStart(2,'0');
+const YMD = (d) => new Date(d).toISOString().slice(0,10);
+const addDays = (d, n) => dfAddDays(new Date(d), n);
+const startOfISOWeek = (d) => dfStartOfWeek(new Date(d), { weekStartsOn: 1 });
+const isoWeekday = (d) => { const wd = new Date(d).getDay(); return wd === 0 ? 7 : wd; }; // 1..7
 
-export const YMD = (d) => new Date(d).toISOString().slice(0,10);
-export const addDays = (d, n) => dfAddDays(new Date(d), n);
-export const startOfISOWeek = (d) => dfStartOfWeek(new Date(d), { weekStartsOn: 1 });
-export const isoWeekday = (d) => { const wd = new Date(d).getDay(); return wd === 0 ? 7 : wd; }; // 1..7
+// Negocio
+const BUSINESS = {
+  weekday: { open: '07:00', close: '18:00' }, // L–V
+  saturday: { open: '07:00', close: '15:00' } // Sáb
+};
 
-// Constantes públicas
-export const WEEKLY_BASE = 44;    // siempre 44h legales
-export const WEEKLY_EXTRA = 12;   // siempre 12h extras cuando sea posible
-export const WEEKLY_TOTAL = WEEKLY_BASE + WEEKLY_EXTRA;
-export const DAILY_BASE_MAX = 8;  // legales por día (usar para asegurar 8h)
-export const DAILY_CAP_WEEKDAY = 10; // capacidad técnica Lun-Vie (máx utilizable)
-export const DAILY_CAP_SAT = 7;      // capacidad técnica Sáb
+// Breaks (visuales, NO se cuentan)
+const BREAKS = {
+  breakfast: 15, // minutos
+  lunch: 45     // minutos
+};
 
-export function getDailyCapacity(weekday) {
-  if (weekday >= 1 && weekday <= 5) return DAILY_CAP_WEEKDAY; // Lun-Vie
-  if (weekday === 6) return DAILY_CAP_SAT;                   // Sábado
-  return 0;                                                  // Domingo
+// Capacidades netas por día (sin breaks)
+function getDailyNetCap(weekday) {
+  if (weekday >= 1 && weekday <= 5) return 10; // L–V
+  if (weekday === 6) return 7;                 // Sábado
+  return 0;                                    // Domingo
+}
+
+// ventana negocio por día
+function getBusinessWindow(weekday) {
+  if (weekday >= 1 && weekday <= 5) return BUSINESS.weekday;
+  if (weekday === 6) return BUSINESS.saturday;
+  return null;
+}
+
+function hmToMinutes(hhmm) { const [h,m] = hhmm.split(':').map(Number); return h*60 + (m||0); }
+function minutesToHHMM(m) { const h = Math.floor(m/60); const mm = m%60; return `${pad(h)}:${pad(mm)}`; }
+
+// aleatorio múltiplo de 15’
+function randomStartInWindow(minStartMin, maxStartMin) {
+  if (maxStartMin < minStartMin) return minStartMin;
+  const steps = Math.floor((maxStartMin - minStartMin) / 15);
+  const rndSteps = Math.floor(Math.random() * (steps + 1));
+  return minStartMin + rndSteps * 15;
 }
 
 /**
- * Devuelve segmentos (ventanas de trabajo) por día.
- * Si holidayOverride === 'work' => el festivo trabajado tiene ventana 08:00-13:00.
+ * buildDayWithBreaks
+ * Genera bloques de trabajo y breaks.
+ * - horasNetas: 8|9|10 (L–V) o 7 (Sáb)
+ * - El turno visible = horasNetas + 60min (breaks).
+ * - Breakfast a las ~2h del inicio; Lunch en la mitad del turno visible.
+ * - Devuelve {bloques, entradaHHMM, salidaHHMM}
  */
-export function getDailySegments(weekday, holidayOverride) {
-  if (holidayOverride === 'work') {
-    // Fecha festiva trabajada: 08:00-13:00 (5h -> se contabilizará en enteros)
-    return [{ from: '08:00', to: '13:00' }];
+function buildDayWithBreaks(dateISO, weekday, horasNetas) {
+  if (horasNetas <= 0) {
+    return { bloques: [], entradaHHMM: null, salidaHHMM: null };
   }
 
-  if (weekday >= 1 && weekday <= 5) {
-    return [
-      { from: '07:00', to: '09:00' },   // 2h
-      { from: '09:15', to: '12:00' },   // 2h45 -> contabilizamos enteros con floor
-      { from: '12:45', to: '18:00' }    // 5h15
-    ];
-  }
+  const window = getBusinessWindow(weekday);
+  const openMin = hmToMinutes(window.open);
+  const closeMin = hmToMinutes(window.close);
+  const visibleMinutes = horasNetas * 60 + (BREAKS.breakfast + BREAKS.lunch);
 
-  if (weekday === 6) {
-    return [
-      { from: '07:00', to: '09:00' },   // 2h
-      { from: '09:15', to: '12:00' },   // 2h45
-      { from: '12:45', to: '15:00' }    // 2h15
-    ];
-  }
+  // última hora de inicio para caber dentro del negocio
+  const maxStart = closeMin - visibleMinutes;
+  const startMin = randomStartInWindow(openMin, Math.max(openMin, maxStart));
+  const endMin = startMin + visibleMinutes;
 
-  return [];
-}
+  // ubicamos breakfast (≈ +2h) y lunch (≈ mitad del turno visible)
+  const breakfastStart = startMin + 120; // +2h
+  const breakfastEnd   = breakfastStart + BREAKS.breakfast;
 
-/** Convierte hh:mm a minutos desde 00:00 */
-const hmToMinutes = (hhmm) => {
-  const [hh, mm] = hhmm.split(':').map(Number);
-  return hh * 60 + mm;
-};
-/** Diff horas enteras entre hh:mm ranges (floor de horas) */
-const segmentHoursFloor = (from, to) => {
-  const minutes = Math.max(0, hmToMinutes(to) - hmToMinutes(from));
-  return Math.floor(minutes / 60);
-};
+  const midPoint = startMin + Math.floor(visibleMinutes / 2);
+  const lunchStart = midPoint;
+  const lunchEnd   = lunchStart + BREAKS.lunch;
 
-/**
- * Rellena los segmentos secuencialmente hasta cubrir `hoursNeeded`.
- * Retorna bloques { start, end, hours, type } donde type = 'base' | 'extra'
- * start/end en formato ISO datetime: YYYY-MM-DDTHH:MM:00
- */
-function allocateHoursToSegments(dateISO, segments, hoursNeeded, type = 'base') {
-  const toDate = (ymd, hhmm) => new Date(`${ymd}T${hhmm}:00`);
-  let remaining = Math.max(0, Math.floor(hoursNeeded || 0));
+  // bloques de trabajo (tres tramos) + breaks
+  // Tramo A: inicio -> breakfastStart
+  // Break breakfast: breakfastStart -> breakfastEnd
+  // Tramo B: breakfastEnd -> lunchStart
+  // Break lunch: lunchStart -> lunchEnd
+  // Tramo C: lunchEnd -> endMin
   const blocks = [];
 
-  for (const seg of segments) {
-    if (remaining <= 0) break;
-    const segStart = toDate(dateISO, seg.from);
-    const segCap = segmentHoursFloor(seg.from, seg.to);
-    if (segCap <= 0) continue;
-    const use = Math.min(segCap, remaining);
+  const pushWork = (a, b) => {
+    const dur = Math.max(0, b - a);
+    if (dur >= 15) {
+      blocks.push({
+        start: `${dateISO}T${minutesToHHMM(a)}:00`,
+        end: `${dateISO}T${minutesToHHMM(b)}:00`,
+        hours: Math.floor(dur/60), // solo horas enteras
+        type: 'work'
+      });
+    }
+  };
 
-    const end = new Date(segStart.getTime() + use * 3600 * 1000);
-    const fmt = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-    blocks.push({
-      start: `${dateISO}T${fmt(segStart)}:00`,
-      end:   `${dateISO}T${fmt(end)}:00`,
-      hours: use,
-      type
-    });
+  const pushBreak = (a, b, kind) => {
+    if (b > a) {
+      blocks.push({
+        start: `${dateISO}T${minutesToHHMM(a)}:00`,
+        end: `${dateISO}T${minutesToHHMM(b)}:00`,
+        hours: 0,
+        type: kind // 'break_breakfast' | 'break_lunch'
+      });
+    }
+  };
 
-    remaining -= use;
+  // A
+  pushWork(startMin, breakfastStart);
+  // breakfast
+  pushBreak(breakfastStart, breakfastEnd, 'break_breakfast');
+  // B
+  pushWork(breakfastEnd, lunchStart);
+  // lunch
+  pushBreak(lunchStart, lunchEnd, 'break_lunch');
+  // C
+  pushWork(lunchEnd, endMin);
+
+  // Ajuste: asegura que la suma de horas work == horasNetas
+  const sumNet = blocks.filter(b => b.type === 'work').reduce((s,b)=> s + b.hours, 0);
+  if (sumNet !== horasNetas) {
+    // corrige redondeando el último tramo de trabajo
+    const idx = [...blocks].reverse().findIndex(b => b.type === 'work');
+    if (idx >= 0) {
+      const lastWorkIndex = blocks.length - 1 - idx;
+      const diff = horasNetas - sumNet;
+      blocks[lastWorkIndex].hours = Math.max(0, blocks[lastWorkIndex].hours + diff);
+      // y estira su 'end' en horas enteras
+      const st = blocks[lastWorkIndex].start.split('T')[1].slice(0,5);
+      const stMin = hmToMinutes(st);
+      const newEnd = stMin + blocks[lastWorkIndex].hours * 60;
+      blocks[lastWorkIndex].end = `${dateISO}T${minutesToHHMM(newEnd)}:00`;
+    }
   }
 
-  const used = Math.max(0, Math.floor(hoursNeeded || 0)) - remaining;
-  return { blocks, used };
+  const entradaHHMM = minutesToHHMM(startMin);
+  const salidaHHMM  = minutesToHHMM(endMin);
+
+  return { bloques: blocks, entradaHHMM, salidaHHMM };
 }
 
 /**
- * Genera la parte base de la semana (44h) en enteros.
- * Permite overrides por festivos: holidayOverrides = { 'YYYY-MM-DD': 'work'|'skip' }.
- * Retorna dias con horas_base y remaining_base_unfilled si no se pudo completar 44h.
+ * generateRandomWeek
+ * - L–V: horas netas aleatorias 8..10 (enteras)
+ * - Sáb: 7 netas (turno 7:00–15:00 visible por breaks)
+ * - Dom: 0
+ * - Solo se generan días que estén (a) dentro del rango y (b) en workingWeekdays
  */
-function generateBaseWeek({
-  weekStart,
-  rangeStart,
-  rangeEnd,
-  workingWeekdays,
-  holidaySet,
-  holidayOverrides = {}
-}) {
-  let remainingBase = WEEKLY_BASE;
+function generateRandomWeek({ weekStart, rangeStart, rangeEnd, workingWeekdays }) {
   const dias = [];
 
-  const candidates = [];
-  for (let i = 0; i < 7; i++) {
+  for (let i=0;i<7;i++) {
     const d = addDays(weekStart, i);
     if (d < rangeStart || d > rangeEnd) continue;
+
     const ymd = YMD(d);
     const wd = isoWeekday(d);
-    const isHoliday = holidaySet.has(ymd);
-    const override = holidayOverrides[ymd]; // 'work' | 'skip' | undefined
-    const skipByOverride = (isHoliday && override === 'skip');
-    const ok = workingWeekdays.includes(wd) && !skipByOverride;
-    candidates.push({ ymd, wd, ok, override, isHoliday });
-  }
+    const isWorking = workingWeekdays.includes(wd);
 
-  for (const c of candidates) {
-    const segments = getDailySegments(c.wd, c.override);
-    const segCap = segments.reduce((s, seg) => s + segmentHoursFloor(seg.from, seg.to), 0);
-    let assignedBase = 0;
-    if (c.ok && remainingBase > 0 && segCap > 0) {
-      // asignamos máximo DAILY_BASE_MAX (8) por día, o lo que falte del weekly base
-      const canTake = Math.min(DAILY_BASE_MAX, segCap, remainingBase);
-      const { blocks, used } = allocateHoursToSegments(c.ymd, segments, canTake, 'base');
-      assignedBase = used;
-      dias.push({
-        descripcion: c.isHoliday ? '(festivo)' : '',
-        fecha: c.ymd,
-        start: c.ymd,
-        end: c.ymd,
-        horas_base: assignedBase,
-        horas_extra: 0,
-        horas: assignedBase,
-        bloques: blocks
-      });
-      remainingBase -= assignedBase;
-    } else {
-      dias.push({
-        descripcion: c.isHoliday ? '(festivo)' : '',
-        fecha: c.ymd,
-        start: c.ymd,
-        end: c.ymd,
-        horas_base: 0,
-        horas_extra: 0,
-        horas: 0,
-        bloques: []
-      });
+    if (!isWorking || wd === 7) {
+      dias.push({ descripcion:'', fecha: ymd, start: ymd, end: ymd, horas: 0, bloques: [] });
+      continue;
     }
+
+    let horasNetas = 0;
+    if (wd >= 1 && wd <= 5) { // L–V
+      horasNetas = 8 + Math.floor(Math.random() * 3); // 8,9,10
+      horasNetas = Math.min(horasNetas, getDailyNetCap(wd));
+    } else if (wd === 6) { // Sábado fijo 7 netas
+      horasNetas = 7;
+    }
+
+    const { bloques, entradaHHMM, salidaHHMM } = buildDayWithBreaks(ymd, wd, horasNetas);
+    const netHours = bloques.filter(b => b.type === 'work').reduce((s,b)=> s + b.hours, 0);
+
+    dias.push({
+      descripcion: '',
+      fecha: ymd,
+      start: ymd,
+      end: ymd,
+      horas: netHours, // solo netas
+      entrada: entradaHHMM,
+      salida: salidaHHMM,
+      bloques
+    });
   }
 
-  const total = dias.reduce((s,d) => s + Number(d.horas || 0), 0);
-  return {
-    dias,
-    total_horas_semana: total,
-    remaining_base_unfilled: Math.max(0, remainingBase)
-  };
+  const total = dias.reduce((s,d)=> s + (d.horas || 0), 0);
+  return { dias, total_horas_semana: total };
 }
 
 /**
- * Distribuye las horas extras (WEEKLY_EXTRA) entre los días de la semana.
- * Reparte por rondas 1h por día hasta asignar o agotar capacidades.
+ * generateScheduleRandomRange
+ * Recorre semanas ISO entre startDate y endDate y genera aleatoriamente las horas por día.
  */
-function distributeExtrasWeek(dias) {
-  const dayCaps = dias.map(d => {
-    const wd = isoWeekday(new Date(d.fecha));
-    const cap = getDailyCapacity(wd);
-    return Math.max(0, cap - (d.horas_base || 0));
-  });
-
-  let remainingExtra = WEEKLY_EXTRA;
-  const totalPossibleExtra = dayCaps.reduce((s,x)=> s + x, 0);
-  const toAllocate = Math.min(remainingExtra, totalPossibleExtra);
-  remainingExtra = remainingExtra - toAllocate;
-
-  let left = toAllocate;
-  while (left > 0) {
-    let progress = false;
-    for (let i = 0; i < dias.length && left > 0; i++) {
-      if (dayCaps[i] > 0) {
-        const segments = getDailySegments(isoWeekday(new Date(dias[i].fecha)));
-        const { blocks, used } = allocateHoursToSegments(dias[i].fecha, segments, 1, 'extra');
-        dias[i].bloques = dias[i].bloques.concat(blocks);
-        dias[i].horas_extra = (dias[i].horas_extra || 0) + used;
-        dias[i].horas = (dias[i].horas || 0) + used;
-        dayCaps[i] -= used;
-        left -= used;
-        progress = true;
-      }
-    }
-    if (!progress) break;
-  }
-
-  const totalExtrasAssigned = toAllocate - left;
-  return { dias, extrasAssigned: totalExtrasAssigned, extrasUnassigned: remainingExtra + left };
-}
-
-/**
- * Genera semanas en el rango intentando asignar 56h (44 base + 12 extras).
- * holidayOverrides: { 'YYYY-MM-DD': 'work'|'skip' } — frontend decide por festivo.
- */
-export function generateScheduleForRange56(startDate, endDate, workingWeekdays, holidaySet, holidayOverrides = {}) {
+export function generateScheduleRandomRange(startDate, endDate, workingWeekdays) {
   const schedules = [];
   let cursor = startOfISOWeek(new Date(startDate));
   const end = new Date(endDate);
@@ -225,32 +211,18 @@ export function generateScheduleForRange56(startDate, endDate, workingWeekdays, 
     const segStart  = new Date(Math.max(weekStart, rangeStart));
     const segEnd    = new Date(Math.min(weekEnd, end));
 
-    const baseRes = generateBaseWeek({
+    const { dias, total_horas_semana } = generateRandomWeek({
       weekStart,
       rangeStart: segStart,
       rangeEnd: segEnd,
-      workingWeekdays,
-      holidaySet,
-      holidayOverrides
+      workingWeekdays
     });
-
-    const diasCopy = baseRes.dias.map(d => ({ ...d, bloques: [...(d.bloques || [])] }));
-    const { dias: diasWithExtras, extrasAssigned, extrasUnassigned } = distributeExtrasWeek(diasCopy);
-
-    const totalBase = diasWithExtras.reduce((s,d) => s + Number(d.horas_base || 0), 0);
-    const totalExtra = diasWithExtras.reduce((s,d) => s + Number(d.horas_extra || 0), 0);
-    const totalSemana = totalBase + totalExtra;
 
     schedules.push({
       fecha_inicio: format(weekStart, 'yyyy-MM-dd'),
       fecha_fin:    format(weekEnd,   'yyyy-MM-dd'),
-      dias: diasWithExtras,
-      total_horas_semana: totalSemana,
-      total_horas_legales: totalBase,
-      total_horas_extras: totalExtra,
-      remaining_base_unfilled: baseRes.remaining_base_unfilled,
-      extras_assigned: extrasAssigned,
-      extras_unassigned: extrasUnassigned
+      dias,
+      total_horas_semana
     });
 
     cursor = addWeeks(weekStart, 1);
@@ -259,19 +231,10 @@ export function generateScheduleForRange56(startDate, endDate, workingWeekdays, 
   return schedules;
 }
 
-/**
- * Versión retrocompatible que genera solo la parte base (si necesitas)
- */
-export function generateScheduleForRange(startDate, endDate, workingWeekdays, holidaySet, holidayOverrides = {}) {
-  const weeks56 = generateScheduleForRange56(startDate, endDate, workingWeekdays, holidaySet, holidayOverrides);
-  return weeks56.map(w => ({
-    fecha_inicio: w.fecha_inicio,
-    fecha_fin: w.fecha_fin,
-    dias: w.dias.map(d => ({
-      ...d,
-      horas_extra: 0,
-      horas: d.horas_base
-    })),
-    total_horas_semana: w.total_horas_legales
-  }));
-}
+// Exports útiles a otros módulos
+export {
+  YMD,
+  addDays,
+  startOfISOWeek,
+  isoWeekday
+};
