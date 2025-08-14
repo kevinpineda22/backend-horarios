@@ -5,37 +5,39 @@ import * as ctrl from '../controllers/horariosController.js';
 
 const router = express.Router();
 
-// Todas las rutas bajo /api/horarios requieren un token válido
+// Rutas protegidas
 router.use(authenticateUser);
 
 /**
  * GET  /api/horarios/:empleado_id
- * Devuelve el historial de horarios de un empleado
+ * Historial de horarios del empleado
  */
 router.get('/:empleado_id', ctrl.getHorariosByEmpleadoId);
 
 /**
  * POST /api/horarios
- * Crea un nuevo horario SEMANAL automático (44h base, sin extras).
+ * Crea horarios semanales automáticos:
+ * - Intenta 44h base + 12h extra (56h)
+ * - Si no alcanza, crea con lo máximo posible y devuelve "warnings"
  * Body:
  * {
  *   empleado_id: "<uuid>",
  *   fecha_inicio: "YYYY-MM-DD",
  *   fecha_fin: "YYYY-MM-DD",
- *   working_weekdays: [2,3,4,5,6] // Ej: Mar–Sáb. Lun..Dom => 1..7
+ *   working_weekdays: [1,2,3,4,5,6],
+ *   worked_holidays: ["YYYY-MM-DD", ...] // festivos que sí se trabajan (08:00–13:00)
  * }
  */
 router.post('/', ctrl.createHorario);
 
 /**
  * PUT /api/horarios/:id
- * Actualiza un horario existente
+ * Actualiza un horario (no exceder 44 base ni 12 extra/semana)
  */
 router.put('/:id', ctrl.updateHorario);
 
 /**
  * DELETE /api/horarios/:id
- * Elimina un horario
  */
 router.delete('/:id', ctrl.deleteHorario);
 
