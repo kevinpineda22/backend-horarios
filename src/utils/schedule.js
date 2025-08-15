@@ -15,6 +15,7 @@ export const isoWeekday = (d) => { const wd = new Date(d).getDay(); return wd ==
 // --- CONSTANTES ---
 export const WEEKLY_BASE = 44;
 export const WEEKLY_EXTRA = 12;
+const DAILY_MIN_WEEKDAY = 8;
 const DAILY_MAX_WEEKDAY = 10;
 const HOLIDAY_HOURS = 6;
 const DAILY_LEGAL_LIMIT = 8;
@@ -32,6 +33,16 @@ const minutesToHHMM = (m) => {
   const mm = Math.round(m % 60);
   return `${pad(hh)}:${pad(mm)}`;
 };
+
+// ===================================================================
+// CORRECCIÓN: Se añade 'export' a esta función para hacerla pública
+// ===================================================================
+export function getDailyCapacity(wd, isHoliday, holidayOverride) {
+  if (isHoliday && holidayOverride === 'work') return HOLIDAY_HOURS;
+  if (wd >= 1 && wd <= 5) return DAILY_MAX_WEEKDAY;
+  if (wd === 6) return 8; // Capacidad Sábado
+  return 0;
+}
 
 function getDayInfo(wd, isHoliday, holidayOverride) {
   if (isHoliday && holidayOverride === 'work') {
@@ -141,11 +152,9 @@ export function generateScheduleForRange56(startDate, endDate, workingWeekdays, 
     }
 
     if (workableDaysThisWeek.length > 0) {
-      // Objeto para almacenar las horas de cada día
       const dayHours = {};
       workableDaysThisWeek.forEach(d => dayHours[d.ymd] = { base: 0, extra: 0 });
 
-      // --- FASE 1: Distribuir 44 horas BASE ---
       let baseHoursToDistribute = WEEKLY_BASE;
       const holidayWorked = workableDaysThisWeek.find(d => d.isHoliday && d.override === 'work');
       if (holidayWorked) {
@@ -165,7 +174,6 @@ export function generateScheduleForRange56(startDate, endDate, workingWeekdays, 
         attempts--;
       }
 
-      // --- FASE 2: Distribuir 12 horas EXTRA ---
       let extraHoursToDistribute = WEEKLY_EXTRA;
       attempts = 200;
       while (extraHoursToDistribute > 0 && attempts > 0) {
@@ -181,7 +189,6 @@ export function generateScheduleForRange56(startDate, endDate, workingWeekdays, 
         attempts--;
       }
 
-      // --- FASE 3: Generar bloques y objeto final ---
       for (const day of workableDaysThisWeek) {
         const totalHours = dayHours[day.ymd].base + dayHours[day.ymd].extra;
         if (totalHours > 0) {
@@ -192,7 +199,7 @@ export function generateScheduleForRange56(startDate, endDate, workingWeekdays, 
             horas: totalHours,
             horas_base: dayHours[day.ymd].base,
             horas_extra: dayHours[day.ymd].extra,
-            bloques,
+            bloques: blocks,
             jornada_entrada: entryTime,
             jornada_salida: exitTime,
           });

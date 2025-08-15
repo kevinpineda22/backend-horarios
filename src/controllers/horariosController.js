@@ -75,7 +75,8 @@ export const updateHorario = async (req, res) => {
     const byWeek = new Map();
     for (const d of newDias) {
       const wd = isoWeekday(new Date(d.fecha));
-      const cap = getDailyCapacity(wd); // Por esto se necesita la importación
+      // Aquí se usa getDailyCapacity, por eso debe estar exportada
+      const cap = getDailyCapacity(wd, false, null); 
       const base = Number(d.horas_base || 0);
       const extra = Number(d.horas_extra || 0);
       const total = Number(d.horas || base + extra);
