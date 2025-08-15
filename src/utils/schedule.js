@@ -33,6 +33,19 @@ const minutesToHHMM = (m) => {
   return `${pad(hh)}:${pad(mm)}`;
 };
 
+// ===================================================================
+// INICIO DE LA CORRECCIÓN: Se añade 'export' a esta función
+// ===================================================================
+export function getDailyCapacity(wd, isHoliday, holidayOverride) {
+  if (isHoliday && holidayOverride === 'work') return HOLIDAY_HOURS;
+  if (wd >= 1 && wd <= 5) return DAILY_MAX_WEEKDAY;
+  if (wd === 6) return 8; // Capacidad Sábado
+  return 0;
+}
+// ===================================================================
+// FIN DE LA CORRECCIÓN
+// ===================================================================
+
 function getDayInfo(wd, isHoliday, holidayOverride) {
   if (isHoliday && holidayOverride === 'work') {
     return {
@@ -124,7 +137,6 @@ export function generateScheduleForRange56(startDate, endDate, workingWeekdays, 
     const dias = [];
     let hoursToDistribute = WEEKLY_BASE + WEEKLY_EXTRA;
 
-    // 1. Identificar todos los días laborables de la semana
     const workableDaysThisWeek = [];
     for (let i = 0; i < 7; i++) {
         const d = addDays(weekStart, i);
@@ -138,14 +150,16 @@ export function generateScheduleForRange56(startDate, endDate, workingWeekdays, 
         const override = holidayOverrides[ymd];
         if (isHoliday && override === 'skip') continue;
         
-        workableDaysThisWeek.push({ ymd, wd, isHoliday, override, hours: 0 });
+        const dayInfo = getDayInfo(wd, isHoliday, override);
+        if (dayInfo.capacity > 0) {
+            workableDaysThisWeek.push({ ymd, wd, isHoliday, override, hours: 0, capacity: dayInfo.capacity });
+        }
     }
     if (workableDaysThisWeek.length === 0) {
         cursor = addWeeks(weekStart, 1);
         continue;
     }
 
-    // 2. Asignar horas fijas a festivos
     workableDaysThisWeek.forEach(day => {
         if (day.isHoliday && day.override === 'work') {
             day.hours = HOLIDAY_HOURS;
@@ -153,19 +167,16 @@ export function generateScheduleForRange56(startDate, endDate, workingWeekdays, 
         }
     });
 
-    // 3. Asignar horas mínimas a días de semana
     const weekdays = workableDaysThisWeek.filter(d => d.wd <= 5 && !d.isHoliday);
     weekdays.forEach(day => {
         day.hours = DAILY_MIN_WEEKDAY;
         hoursToDistribute -= DAILY_MIN_WEEKDAY;
     });
 
-    // 4. Distribuir horas restantes (base y extras) hasta cumplir el total semanal o los topes diarios
     let attempts = 100;
     while(hoursToDistribute > 0 && attempts > 0) {
         const randomDay = workableDaysThisWeek[Math.floor(Math.random() * workableDaysThisWeek.length)];
-        const dayInfo = getDayInfo(randomDay.wd, randomDay.isHoliday, randomDay.override);
-        const maxHours = (randomDay.wd <= 5 && !randomDay.isHoliday) ? DAILY_MAX_WEEKDAY : dayInfo.capacity;
+        const maxHours = (randomDay.wd <= 5 && !randomDay.isHoliday) ? DAILY_MAX_WEEKDAY : randomDay.capacity;
 
         if (randomDay.hours < maxHours) {
             randomDay.hours++;
@@ -174,12 +185,11 @@ export function generateScheduleForRange56(startDate, endDate, workingWeekdays, 
         attempts--;
     }
 
-    // 5. Generar bloques y detalles finales para cada día
     for (const day of workableDaysThisWeek) {
         if (day.hours > 0) {
             const dayInfo = getDayInfo(day.wd, day.isHoliday, day.override);
             const { blocks, entryTime, exitTime } = allocateHoursRandomly(day.ymd, dayInfo, day.hours);
-            const base = day.isHoliday ? Math.min(day.hours, HOLIDAY_HOURS) : Math.min(day.hours, WEEKLY_BASE);
+            const base = day.isHoliday ? 0 : Math.min(day.hours, DAILY_MAX_WEEKDAY);
 
             dias.push({
                 fecha: day.ymd,
