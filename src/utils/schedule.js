@@ -33,18 +33,12 @@ const minutesToHHMM = (m) => {
   return `${pad(hh)}:${pad(mm)}`;
 };
 
-// ===================================================================
-// INICIO DE LA CORRECCIÓN: Se añade 'export' a esta función
-// ===================================================================
 export function getDailyCapacity(wd, isHoliday, holidayOverride) {
   if (isHoliday && holidayOverride === 'work') return HOLIDAY_HOURS;
   if (wd >= 1 && wd <= 5) return DAILY_MAX_WEEKDAY;
   if (wd === 6) return 8; // Capacidad Sábado
   return 0;
 }
-// ===================================================================
-// FIN DE LA CORRECCIÓN
-// ===================================================================
 
 function getDayInfo(wd, isHoliday, holidayOverride) {
   if (isHoliday && holidayOverride === 'work') {
@@ -189,14 +183,20 @@ export function generateScheduleForRange56(startDate, endDate, workingWeekdays, 
         if (day.hours > 0) {
             const dayInfo = getDayInfo(day.wd, day.isHoliday, day.override);
             const { blocks, entryTime, exitTime } = allocateHoursRandomly(day.ymd, dayInfo, day.hours);
-            const base = day.isHoliday ? 0 : Math.min(day.hours, DAILY_MAX_WEEKDAY);
+            const base = day.isHoliday ? 0 : Math.min(day.hours, WEEKLY_BASE); // Simplificado
 
             dias.push({
                 fecha: day.ymd,
                 horas: day.hours,
                 horas_base: base,
                 horas_extra: day.hours - base,
-                bloques,
+                // ===================================================================
+                // INICIO DE LA CORRECCIÓN: Se usa 'blocks' en lugar de 'bloques'
+                // ===================================================================
+                bloques: blocks,
+                // ===================================================================
+                // FIN DE LA CORRECCIÓN
+                // ===================================================================
                 jornada_entrada: entryTime,
                 jornada_salida: exitTime,
             });
