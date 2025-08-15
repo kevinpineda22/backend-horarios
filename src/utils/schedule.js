@@ -18,6 +18,7 @@ export const WEEKLY_EXTRA = 12;
 export const DAILY_CAP_WEEKDAY = 10;
 export const DAILY_CAP_SAT = 8;
 export const DAILY_MIN_BASE_WEEKDAY = 8;
+const HOLIDAY_CAPACITY = 6;
 const BREAKFAST_MINUTES = 15;
 const LUNCH_MINUTES = 45;
 
@@ -33,17 +34,15 @@ const minutesToHHMM = (m) => {
   return `${pad(hh)}:${pad(mm)}`;
 };
 
-export function getDailyCapacity(weekday) {
+export function getDailyCapacity(weekday, isHoliday, holidayOverride) {
+  if (isHoliday && holidayOverride === 'work') return HOLIDAY_CAPACITY;
   if (weekday >= 1 && weekday <= 5) return DAILY_CAP_WEEKDAY;
   if (weekday === 6) return DAILY_CAP_SAT;
   return 0;
 }
 
-/**
- * Devuelve los segmentos de trabajo y los descansos para un día.
- */
-function getDaySegmentsAndBreaks(weekday, holidayOverride) {
-  if (holidayOverride === 'work') {
+function getDaySegmentsAndBreaks(weekday, isHoliday, holidayOverride) {
+  if (isHoliday && holidayOverride === 'work') {
     return {
       segments: [{ from: hmToMinutes('07:00'), to: hmToMinutes('13:00') }],
       breaks: [],
@@ -63,9 +62,6 @@ function getDaySegmentsAndBreaks(weekday, holidayOverride) {
   return daySegments;
 }
 
-/**
- * Calcula la hora de finalización de una jornada, teniendo en cuenta los descansos.
- */
 function calculateShiftEndTime(startTimeMinutes, workMinutes, breaks) {
   let endTimeMinutes = startTimeMinutes + workMinutes;
   for (const breakInfo of breaks) {
@@ -76,45 +72,53 @@ function calculateShiftEndTime(startTimeMinutes, workMinutes, breaks) {
   return endTimeMinutes;
 }
 
+// ===================================================================
+// INICIO DE LA CORRECCIÓN: Nueva función para distribuir horas base
+// ===================================================================
 /**
- * Distribuye las 44 horas base de forma aleatoria entre los días laborables,
- * respetando el mínimo de 8 horas diarias de Lunes a Viernes.
+ * Distribuye las horas base entre una lista de días laborables válidos.
+ * @param {Array} workableDays - Lista de objetos { wd, capacity } para los días a trabajar.
  */
-function distributeBaseHoursRandomly(workingWeekdays) {
-  const targets = {};
-  let hoursToDistribute = WEEKLY_BASE;
-  const weekdays = workingWeekdays.filter(d => d >= 1 && d <= 5);
+function distributeBaseHours(workableDays) {
+    const targets = {};
+    let hoursToDistribute = WEEKLY_BASE;
 
-  if (weekdays.length === 0) return targets; // Evitar errores si no hay días de semana
+    if (workableDays.length === 0) return targets;
 
-  // Asignar el mínimo obligatorio
-  for (const day of weekdays) {
-    targets[day] = DAILY_MIN_BASE_WEEKDAY;
-    hoursToDistribute -= DAILY_MIN_BASE_WEEKDAY;
-  }
+    // Inicializar contadores
+    workableDays.forEach(day => targets[day.wd] = 0);
 
-  // Distribuir las horas restantes aleatoriamente
-  while (hoursToDistribute > 0) {
-    const randomDay = weekdays[Math.floor(Math.random() * weekdays.length)];
-    const capacity = getDailyCapacity(randomDay);
-    if (targets[randomDay] < capacity) {
-      targets[randomDay]++;
-      hoursToDistribute--;
-    }
-  }
-  return targets;
+    // Asignar el mínimo obligatorio a los días de semana que no son festivos
+    const weekdays = workableDays.filter(day => day.wd >= 1 && day.wd <= 5 && day.capacity > HOLIDAY_CAPACITY);
+    for (const day of weekdays) {
+        const hours = Math.min(DAILY_MIN_BASE_WEEKDAY, day.capacity);
+        targets[day.wd] = hours;
+        hoursToDistribute -= hours;
+    }
+
+    // Distribuir las horas restantes aleatoriamente entre TODOS los días laborables
+    let attempts = 100; // Safeguard
+    while (hoursToDistribute > 0 && attempts > 0) {
+        const randomDay = workableDays[Math.floor(Math.random() * workableDays.length)];
+        
+        if (targets[randomDay.wd] < randomDay.capacity) {
+            targets[randomDay.wd]++;
+            hoursToDistribute--;
+        }
+        attempts--;
+    }
+
+    return targets;
 }
+// ===================================================================
+// FIN DE LA CORRECCIÓN
+// ===================================================================
 
-/**
- * Asigna los bloques de trabajo para un número de horas dado, con una hora de inicio aleatoria.
- */
 function allocateHoursRandomly(dateISO, dayInfo, hoursNeeded) {
   if (hoursNeeded <= 0) {
     return { blocks: [], used: 0, entryTime: null, exitTime: null };
   }
-
   const { segments, breaks } = dayInfo;
-  
   let totalShiftMinutes = hoursNeeded * 60;
   if (hoursNeeded > 4) totalShiftMinutes += LUNCH_MINUTES;
   if (hoursNeeded > 2) totalShiftMinutes += BREAKFAST_MINUTES;
@@ -130,9 +134,7 @@ function allocateHoursRandomly(dateISO, dayInfo, hoursNeeded) {
   const range = (latestStart - earliestStart) / 15;
   const randomStep = Math.floor(Math.random() * (range + 1));
   const startTimeMinutes = earliestStart + randomStep * 15;
-
   const finalExitTime = calculateShiftEndTime(startTimeMinutes, hoursNeeded * 60, breaks);
-  
   const blocks = [];
   let remainingWork = hoursNeeded * 60;
   let currentTime = startTimeMinutes;
@@ -143,10 +145,8 @@ function allocateHoursRandomly(dateISO, dayInfo, hoursNeeded) {
       currentTime = currentBreak.start + currentBreak.duration;
       continue;
     }
-
     const blockEnd = currentTime + remainingWork;
     const nextBreak = breaks.find(b => currentTime < b.start && blockEnd >= b.start);
-    
     const endOfBlock = nextBreak ? nextBreak.start : blockEnd;
     const durationInBlock = endOfBlock - currentTime;
 
@@ -157,11 +157,9 @@ function allocateHoursRandomly(dateISO, dayInfo, hoursNeeded) {
         hours: durationInBlock / 60,
       });
     }
-
     remainingWork -= durationInBlock;
     currentTime = endOfBlock;
   }
-  
   return {
     blocks,
     used: hoursNeeded,
@@ -170,8 +168,6 @@ function allocateHoursRandomly(dateISO, dayInfo, hoursNeeded) {
   };
 }
 
-
-// --- LÓGICA PRINCIPAL DE GENERACIÓN ---
 export function generateScheduleForRange56(startDate, endDate, workingWeekdays, holidaySet, holidayOverrides = {}) {
   const schedules = [];
   let cursor = startOfISOWeek(new Date(startDate));
@@ -182,27 +178,41 @@ export function generateScheduleForRange56(startDate, endDate, workingWeekdays, 
     const weekStart = cursor;
     const weekEnd = addDays(weekStart, 6);
 
-    const baseTargets = distributeBaseHoursRandomly(workingWeekdays);
+    // ===================================================================
+    // INICIO DE LA CORRECCIÓN: Identificar días laborables ANTES de distribuir horas
+    // ===================================================================
+    const workableDaysInWeek = [];
+    for (let i = 0; i < 7; i++) {
+        const d = addDays(weekStart, i);
+        const ymd = YMD(d);
+        const wd = isoWeekday(d);
+
+        if (d < rangeStart || d > end || !workingWeekdays.includes(wd)) continue;
+
+        const isHoliday = holidaySet.has(ymd);
+        const override = holidayOverrides[ymd];
+        if (isHoliday && override !== 'work') continue;
+        
+        const capacity = getDailyCapacity(wd, isHoliday, override);
+        if (capacity > 0) {
+            workableDaysInWeek.push({ ymd, wd, isHoliday, override, capacity });
+        }
+    }
+
+    const baseTargets = distributeBaseHours(workableDaysInWeek);
     const dias = [];
+    // ===================================================================
+    // FIN DE LA CORRECCIÓN
+    // ===================================================================
 
-    for (let i = 0; i < 7; i++) {
-      const d = addDays(weekStart, i);
-      const ymd = YMD(d);
-      const wd = isoWeekday(d);
-
-      if (d < rangeStart || d > end || !workingWeekdays.includes(wd)) continue;
-
-      const override = holidayOverrides[ymd];
-      const isHoliday = holidaySet.has(ymd);
-      if (isHoliday && override !== 'work') continue;
-
-      const dayInfo = getDaySegmentsAndBreaks(wd, override);
-      const baseHours = baseTargets[wd] || 0;
-      const { blocks, used, entryTime, exitTime } = allocateHoursRandomly(ymd, dayInfo, baseHours);
+    for (const day of workableDaysInWeek) {
+      const dayInfo = getDaySegmentsAndBreaks(day.wd, day.isHoliday, day.override);
+      const baseHours = baseTargets[day.wd] || 0;
+      const { blocks, used, entryTime, exitTime } = allocateHoursRandomly(day.ymd, dayInfo, baseHours);
       
       if (used > 0) {
         dias.push({
-          fecha: ymd,
+          fecha: day.ymd,
           horas_base: used,
           horas_extra: 0,
           horas: used,
@@ -215,11 +225,13 @@ export function generateScheduleForRange56(startDate, endDate, workingWeekdays, 
     
     if (dias.length > 0) {
       let extrasToDistribute = WEEKLY_EXTRA;
-      let attempts = 50; 
+      let attempts = 100; 
       while (extrasToDistribute > 0 && attempts > 0) {
           const randomDay = dias[Math.floor(Math.random() * dias.length)];
           const wd = isoWeekday(randomDay.fecha);
-          const capacity = getDailyCapacity(wd);
+          const isHoliday = holidaySet.has(randomDay.fecha);
+          const override = holidayOverrides[randomDay.fecha];
+          const capacity = getDailyCapacity(wd, isHoliday, override);
 
           if (randomDay.horas < capacity) {
               randomDay.horas_extra++;
@@ -232,15 +244,10 @@ export function generateScheduleForRange56(startDate, endDate, workingWeekdays, 
       for(const dia of dias) {
         if(dia.horas > dia.horas_base) {
           const wd = isoWeekday(dia.fecha);
+          const isHoliday = holidaySet.has(dia.fecha);
           const override = holidayOverrides[dia.fecha];
-          const dayInfo = getDaySegmentsAndBreaks(wd, override);
-          // ===================================================================
-          // INICIO DE LA CORRECCIÓN: Se usaba 'ymd' en lugar de 'dia.fecha'
-          // ===================================================================
+          const dayInfo = getDaySegmentsAndBreaks(wd, isHoliday, override);
           const { blocks, entryTime, exitTime } = allocateHoursRandomly(dia.fecha, dayInfo, dia.horas);
-          // ===================================================================
-          // FIN DE LA CORRECCIÓN
-          // ===================================================================
           
           dia.bloques = blocks.map(b => ({...b, type: 'compound'}));
           dia.jornada_entrada = entryTime;
