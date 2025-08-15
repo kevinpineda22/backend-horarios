@@ -18,6 +18,7 @@ export const WEEKLY_EXTRA = 12;
 const DAILY_MIN_WEEKDAY = 8;
 const DAILY_MAX_WEEKDAY = 10;
 const HOLIDAY_HOURS = 6;
+const DAILY_LEGAL_LIMIT = 8; // Límite de horas legales por día
 const BREAKFAST_MINUTES = 15;
 const LUNCH_MINUTES = 45;
 
@@ -183,20 +184,30 @@ export function generateScheduleForRange56(startDate, endDate, workingWeekdays, 
         if (day.hours > 0) {
             const dayInfo = getDayInfo(day.wd, day.isHoliday, day.override);
             const { blocks, entryTime, exitTime } = allocateHoursRandomly(day.ymd, dayInfo, day.hours);
-            const base = day.isHoliday ? 0 : Math.min(day.hours, WEEKLY_BASE); // Simplificado
+            
+            // ===================================================================
+            // INICIO DE LA CORRECCIÓN: Lógica para calcular base y extra por día
+            // ===================================================================
+            let base = 0;
+            let extra = 0;
+
+            if (day.isHoliday) {
+                base = day.hours; // Las horas en festivo se consideran base
+                extra = 0;
+            } else {
+                base = Math.min(day.hours, DAILY_LEGAL_LIMIT);
+                extra = Math.max(0, day.hours - DAILY_LEGAL_LIMIT);
+            }
+            // ===================================================================
+            // FIN DE LA CORRECCIÓN
+            // ===================================================================
 
             dias.push({
                 fecha: day.ymd,
                 horas: day.hours,
                 horas_base: base,
-                horas_extra: day.hours - base,
-                // ===================================================================
-                // INICIO DE LA CORRECCIÓN: Se usa 'blocks' en lugar de 'bloques'
-                // ===================================================================
+                horas_extra: extra,
                 bloques: blocks,
-                // ===================================================================
-                // FIN DE LA CORRECCIÓN
-                // ===================================================================
                 jornada_entrada: entryTime,
                 jornada_salida: exitTime,
             });
