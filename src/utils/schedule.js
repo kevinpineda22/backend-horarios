@@ -15,10 +15,9 @@ export const isoWeekday = (d) => { const wd = new Date(d).getDay(); return wd ==
 // --- CONSTANTES ---
 export const WEEKLY_BASE = 44;
 export const WEEKLY_EXTRA = 12;
-const DAILY_MIN_WEEKDAY = 8;
 const DAILY_MAX_WEEKDAY = 10;
 const HOLIDAY_HOURS = 6;
-const DAILY_LEGAL_LIMIT = 8; // Límite de horas legales por día
+const DAILY_LEGAL_LIMIT = 8;
 const BREAKFAST_MINUTES = 15;
 const LUNCH_MINUTES = 45;
 
@@ -33,13 +32,6 @@ const minutesToHHMM = (m) => {
   const mm = Math.round(m % 60);
   return `${pad(hh)}:${pad(mm)}`;
 };
-
-export function getDailyCapacity(wd, isHoliday, holidayOverride) {
-  if (isHoliday && holidayOverride === 'work') return HOLIDAY_HOURS;
-  if (wd >= 1 && wd <= 5) return DAILY_MAX_WEEKDAY;
-  if (wd === 6) return 8; // Capacidad Sábado
-  return 0;
-}
 
 function getDayInfo(wd, isHoliday, holidayOverride) {
   if (isHoliday && holidayOverride === 'work') {
@@ -79,8 +71,8 @@ function allocateHoursRandomly(dateISO, dayInfo, hoursNeeded) {
   
   const { segments, breaks } = dayInfo;
   let totalShiftMinutes = hoursNeeded * 60;
-  if (hoursNeeded > 4) totalShiftMinutes += LUNCH_MINUTES;
-  if (hoursNeeded > 2) totalShiftMinutes += BREAKFAST_MINUTES;
+  if (hoursNeeded > 4 && breaks.length > 1) totalShiftMinutes += LUNCH_MINUTES;
+  if (hoursNeeded > 2 && breaks.length > 0) totalShiftMinutes += BREAKFAST_MINUTES;
 
   const earliestStart = segments[0].from;
   const latestEnd = segments[segments.length - 1].to;
@@ -130,88 +122,82 @@ export function generateScheduleForRange56(startDate, endDate, workingWeekdays, 
     const weekStart = cursor;
     const weekEnd = addDays(weekStart, 6);
     const dias = [];
-    let hoursToDistribute = WEEKLY_BASE + WEEKLY_EXTRA;
 
     const workableDaysThisWeek = [];
     for (let i = 0; i < 7; i++) {
         const d = addDays(weekStart, i);
         if (d < rangeStart || d > end) continue;
-
         const ymd = YMD(d);
         const wd = isoWeekday(d);
         if (!workingWeekdays.includes(wd)) continue;
-
         const isHoliday = holidaySet.has(ymd);
         const override = holidayOverrides[ymd];
         if (isHoliday && override === 'skip') continue;
         
         const dayInfo = getDayInfo(wd, isHoliday, override);
         if (dayInfo.capacity > 0) {
-            workableDaysThisWeek.push({ ymd, wd, isHoliday, override, hours: 0, capacity: dayInfo.capacity });
+            workableDaysThisWeek.push({ ymd, wd, isHoliday, override, capacity: dayInfo.capacity });
         }
     }
-    if (workableDaysThisWeek.length === 0) {
-        cursor = addWeeks(weekStart, 1);
-        continue;
-    }
 
-    workableDaysThisWeek.forEach(day => {
-        if (day.isHoliday && day.override === 'work') {
-            day.hours = HOLIDAY_HOURS;
-            hoursToDistribute -= HOLIDAY_HOURS;
-        }
-    });
+    if (workableDaysThisWeek.length > 0) {
+      // Objeto para almacenar las horas de cada día
+      const dayHours = {};
+      workableDaysThisWeek.forEach(d => dayHours[d.ymd] = { base: 0, extra: 0 });
 
-    const weekdays = workableDaysThisWeek.filter(d => d.wd <= 5 && !d.isHoliday);
-    weekdays.forEach(day => {
-        day.hours = DAILY_MIN_WEEKDAY;
-        hoursToDistribute -= DAILY_MIN_WEEKDAY;
-    });
-
-    let attempts = 100;
-    while(hoursToDistribute > 0 && attempts > 0) {
-        const randomDay = workableDaysThisWeek[Math.floor(Math.random() * workableDaysThisWeek.length)];
-        const maxHours = (randomDay.wd <= 5 && !randomDay.isHoliday) ? DAILY_MAX_WEEKDAY : randomDay.capacity;
-
-        if (randomDay.hours < maxHours) {
-            randomDay.hours++;
-            hoursToDistribute--;
+      // --- FASE 1: Distribuir 44 horas BASE ---
+      let baseHoursToDistribute = WEEKLY_BASE;
+      const holidayWorked = workableDaysThisWeek.find(d => d.isHoliday && d.override === 'work');
+      if (holidayWorked) {
+        const holidayBase = Math.min(HOLIDAY_HOURS, baseHoursToDistribute);
+        dayHours[holidayWorked.ymd].base = holidayBase;
+        baseHoursToDistribute -= holidayBase;
+      }
+      
+      let attempts = 200;
+      const nonHolidayWorkableDays = workableDaysThisWeek.filter(d => !d.isHoliday);
+      while (baseHoursToDistribute > 0 && attempts > 0) {
+        const randomDay = nonHolidayWorkableDays[Math.floor(Math.random() * nonHolidayWorkableDays.length)];
+        if (randomDay && dayHours[randomDay.ymd].base < DAILY_LEGAL_LIMIT) {
+          dayHours[randomDay.ymd].base++;
+          baseHoursToDistribute--;
         }
         attempts--;
-    }
+      }
 
-    for (const day of workableDaysThisWeek) {
-        if (day.hours > 0) {
-            const dayInfo = getDayInfo(day.wd, day.isHoliday, day.override);
-            const { blocks, entryTime, exitTime } = allocateHoursRandomly(day.ymd, dayInfo, day.hours);
-            
-            // ===================================================================
-            // INICIO DE LA CORRECCIÓN: Lógica para calcular base y extra por día
-            // ===================================================================
-            let base = 0;
-            let extra = 0;
-
-            if (day.isHoliday) {
-                base = day.hours; // Las horas en festivo se consideran base
-                extra = 0;
-            } else {
-                base = Math.min(day.hours, DAILY_LEGAL_LIMIT);
-                extra = Math.max(0, day.hours - DAILY_LEGAL_LIMIT);
-            }
-            // ===================================================================
-            // FIN DE LA CORRECCIÓN
-            // ===================================================================
-
-            dias.push({
-                fecha: day.ymd,
-                horas: day.hours,
-                horas_base: base,
-                horas_extra: extra,
-                bloques: blocks,
-                jornada_entrada: entryTime,
-                jornada_salida: exitTime,
-            });
+      // --- FASE 2: Distribuir 12 horas EXTRA ---
+      let extraHoursToDistribute = WEEKLY_EXTRA;
+      attempts = 200;
+      while (extraHoursToDistribute > 0 && attempts > 0) {
+        const randomDay = workableDaysThisWeek[Math.floor(Math.random() * workableDaysThisWeek.length)];
+        if (randomDay) {
+          const totalCurrentHours = dayHours[randomDay.ymd].base + dayHours[randomDay.ymd].extra;
+          const maxHours = (randomDay.wd <= 5 && !randomDay.isHoliday) ? DAILY_MAX_WEEKDAY : randomDay.capacity;
+          if (totalCurrentHours < maxHours) {
+            dayHours[randomDay.ymd].extra++;
+            extraHoursToDistribute--;
+          }
         }
+        attempts--;
+      }
+
+      // --- FASE 3: Generar bloques y objeto final ---
+      for (const day of workableDaysThisWeek) {
+        const totalHours = dayHours[day.ymd].base + dayHours[day.ymd].extra;
+        if (totalHours > 0) {
+          const dayInfo = getDayInfo(day.wd, day.isHoliday, day.override);
+          const { blocks, entryTime, exitTime } = allocateHoursRandomly(day.ymd, dayInfo, totalHours);
+          dias.push({
+            fecha: day.ymd,
+            horas: totalHours,
+            horas_base: dayHours[day.ymd].base,
+            horas_extra: dayHours[day.ymd].extra,
+            bloques,
+            jornada_entrada: entryTime,
+            jornada_salida: exitTime,
+          });
+        }
+      }
     }
     
     schedules.push({
