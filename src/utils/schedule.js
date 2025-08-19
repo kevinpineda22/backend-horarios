@@ -196,6 +196,7 @@ export function generateScheduleForRange56(startDate, endDate, workingWeekdays, 
           const { blocks, entryTime, exitTime } = allocateHoursRandomly(day.ymd, dayInfo, totalHours);
           dias.push({
             fecha: day.ymd,
+            descripcion: WD_NAME[day.wd],
             horas: totalHours,
             horas_base: dayHours[day.ymd].base,
             horas_extra: dayHours[day.ymd].extra,

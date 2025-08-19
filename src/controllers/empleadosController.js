@@ -21,32 +21,46 @@ const parseFile = async (file) => {
 /**
  * Función auxiliar para encontrar o crear una empresa/sede y devolver su UUID
  */
-const findOrCreateId = async (tableName, name) => {
-    if (!name) return null;
-    try {
-        const { data: existingData, error } = await supabaseAxios.get(`/${tableName}?select=id&nombre=eq.${name}`);
-        if (error) throw error;
-        
-        if (existingData && existingData.length > 0) {
-            return existingData[0].id;
-        } else {
-            const { data: newData, error: createError } = await supabaseAxios.post(`/${tableName}`, [{ nombre: name }]);
-            if (createError) throw createError;
-            return newData[0].id;
-        }
-    } catch (e) {
-        console.error(`Error finding or creating ${tableName}:`, e);
-        throw e;
-    }
-};
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+const findOrCreateId = async (tableName, value) => {
+  // value puede ser null | '' | 'Nombre' | 'uuid-v4'
+  if (!value) return null;
+  try {
+    // Si parece UUID, lo devolvemos directo sin consulta
+    if (UUID_REGEX.test(value)) {
+      return value;
+    }
+
+    // Si no es UUID, asumimos que es un NOMBRE
+    const { data: existingData, error } = await supabaseAxios.get(`/${tableName}?select=id&nombre=eq.${encodeURIComponent(value)}`);
+    if (error) throw error;
+
+    if (existingData && existingData.length > 0) {
+      return existingData[0].id;
+    } else {
+      const { data: newData, error: createError } = await supabaseAxios.post(`/${tableName}`, [{ nombre: value }]);
+      if (createError) throw createError;
+      return newData[0].id;
+    }
+  } catch (e) {
+    console.error(`Error finding or creating ${tableName}:`, e);
+    throw e;
+  }
+};
 
 /**
  * Endpoint para obtener todos los empleados.
  */
 export const getEmpleados = async (req, res) => {
   try {
-    const { data, error } = await supabaseAxios.get('/empleados?select=*&order=nombre_completo.asc');
+    const params = new URLSearchParams({
+      select: '*',
+      order: 'nombre_completo.asc',
+      ...req.query, // <-- reenviamos filtros como estado=eq.activo, cedula=like.*, etc.
+    });
+
+    const { data, error } = await supabaseAxios.get(`/empleados?${params.toString()}`);
     if (error) throw error;
     res.json(data);
   } catch (e) {
@@ -61,30 +75,26 @@ export const getEmpleados = async (req, res) => {
 export const createEmpleado = async (req, res) => {
   try {
     const { cedula, nombre_completo, rol, empresa_id, sede_id } = req.body;
-    
-    // Busca o crea la empresa y la sede para obtener los IDs
+
     const empresaUuid = await findOrCreateId('empresas', empresa_id);
-    const sedeUuid = await findOrCreateId('sedes', sede_id);
-    
+    const sedeUuid    = await findOrCreateId('sedes',    sede_id);
+
     const payload = {
-        cedula,
-        nombre_completo,
-        rol,
-        empresa_id: empresaUuid,
-        sede_id: sedeUuid,
-        estado: 'activo'
+      cedula,
+      nombre_completo,
+      rol,
+      empresa_id: empresaUuid,
+      sede_id: sedeUuid,
+      estado: 'activo'
     };
-    
-    // Realiza la inserción en la tabla de 'empleados'
+
     const { data, error } = await supabaseAxios.post('/empleados', [payload]);
-    
     if (error) {
       if (error.code === '23505') {
         return res.status(409).json({ message: 'Ya existe un empleado con esta cédula.' });
       }
       throw error;
     }
-    
     res.status(201).json(data[0]);
   } catch (e) {
     console.error(e);
