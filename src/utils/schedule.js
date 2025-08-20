@@ -22,6 +22,17 @@ const DAILY_LEGAL_LIMIT = 8;
 const BREAKFAST_MINUTES = 15;
 const LUNCH_MINUTES = 45;
 
+// Nombres de días (ISO: 1 = Lunes ... 7 = Domingo)
+const WD_NAME = {
+  1: 'Lunes',
+  2: 'Martes',
+  3: 'Miércoles',
+  4: 'Jueves',
+  5: 'Viernes',
+  6: 'Sábado',
+  7: 'Domingo',
+};
+
 // --- HELPERS ---
 const hmToMinutes = (hhmm) => {
   const [hh, mm] = hhmm.split(':').map(Number);
