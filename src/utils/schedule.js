@@ -190,3 +190,8 @@ export function getDailyCapacity(wd, isHoliday) {
   if (wd >= 1 && wd <= 5) return 10;
   return 0;
 }
+/* 
+// --- Aliases para retrocompatibilidad con el controller antiguo ---
+export const WEEKLY_BASE  = WEEKLY_LEGAL_LIMIT; // 44
+export const WEEKLY_EXTRA = WEEKLY_EXTRA_LIMIT; // 12
+export const WEEKLY_TOTAL = WEEKLY_TOTAL_LIMIT; // 56 */

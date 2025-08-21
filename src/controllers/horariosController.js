@@ -5,8 +5,9 @@ import {
   getDailyCapacity, // Necesario para la validación en updateHorario
   isoWeekday,
   startOfISOWeek,
-  WEEKLY_EXTRA,
-  WEEKLY_BASE,
+   WEEKLY_LEGAL_LIMIT as WEEKLY_BASE,
+  WEEKLY_EXTRA_LIMIT as WEEKLY_EXTRA,
+  WEEKLY_TOTAL_LIMIT as WEEKLY_TOTAL,
 } from "../utils/schedule.js";
 import { getHolidaySet } from "../utils/holidays.js";
 
