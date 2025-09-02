@@ -9,14 +9,14 @@ import {
 // ========================
 // Constantes de negocio
 // ========================
-const DAILY_LEGAL_LIMIT  = 8;   // Máx legales por día
-const WEEKLY_LEGAL_LIMIT = 44;  // Legales por semana
-const WEEKLY_EXTRA_LIMIT = 12;  // Máx extras por semana
-const WEEKLY_TOTAL_LIMIT = 56;  // 44 + 12
-const HOLIDAY_HOURS      = 6;   // Festivo trabajado: 6h (7–13)
+const DAILY_LEGAL_LIMIT = 8;
+const WEEKLY_LEGAL_LIMIT = 44;
+const WEEKLY_EXTRA_LIMIT = 12;
+const WEEKLY_TOTAL_LIMIT = 56;
+const HOLIDAY_HOURS = 6;
 
-const BREAKFAST_MINUTES = 15;   // 15 min desayuno
-const LUNCH_MINUTES     = 45;   // 45 min almuerzo
+const BREAKFAST_MINUTES = 15;
+const LUNCH_MINUTES = 45;
 
 // ========================
 // Helpers de fecha/hora
@@ -27,7 +27,7 @@ export const addDays = (d, n) => dfAddDays(new Date(d), n);
 export const startOfISOWeek = (d) => dfStartOfWeek(new Date(d), { weekStartsOn: 1 });
 export const isoWeekday = (d) => {
   const wd = new Date(d).getDay();
-  return wd === 0 ? 7 : wd; // 1=Mon ... 7=Sun
+  return wd === 0 ? 7 : wd;
 };
 
 const hmToMinutes = (hhmm) => {
@@ -54,23 +54,27 @@ const WD_NAME = {
 };
 
 // ========================
-// Info de día (segmentos sin descansos)
-// Lunes–Viernes: 07:00–09:00, 09:15–12:00, 12:45–18:00 (10h de capacidad)
-// Sábado:        07:00–09:00, 09:15–12:00, 12:45–16:00 (8h de capacidad)
-// Festivo work:  07:00–13:00 (6h de capacidad)
-// Descansos SIEMPRE: 09:00 (15m), 12:00 (45m) – NO cuentan como horas trabajadas
+// Info de día
 // ========================
 function getDayInfo(wd, isHoliday, holidayOverride) {
   if (isHoliday && holidayOverride === 'work') {
     return {
       capacity: HOLIDAY_HOURS,
       segments: [{ from: hmToMinutes('07:00'), to: hmToMinutes('13:00') }],
-      // El desayuno NO cuenta como horas trabajadas, así que los segmentos ya lo excluyen
       breaks: [{ start: hmToMinutes('09:00'), duration: BREAKFAST_MINUTES }],
     };
   }
 
-  const weekdayCapacity = wd === 6 ? 8 : 10; // sáb 8h, lun-vie 10h (capacidad total de segmentos)
+  // Nuevo: Manejar el domingo, sin capacidad de horas
+  if (wd === 7) {
+    return {
+      capacity: 0,
+      segments: [],
+      breaks: [],
+    };
+  }
+
+  const weekdayCapacity = wd === 6 ? 8 : 10;
   const info = {
     capacity: weekdayCapacity,
     segments: [
@@ -87,10 +91,7 @@ function getDayInfo(wd, isHoliday, holidayOverride) {
 }
 
 // ========================
-// Asignación de horas dentro de segmentos (sin sumar descansos)
-// - hoursNeeded son horas efectivas de trabajo
-// - La jornada (entrada/salida) irá del inicio del primer bloque al fin del último bloque
-//   por lo que "incluye" los huecos de descanso en reloj, pero NO en horas trabajadas.
+// Asignación de horas
 // ========================
 function allocateHoursRandomly(dateISO, dayInfo, hoursNeeded) {
   if (hoursNeeded <= 0) {
@@ -100,15 +101,14 @@ function allocateHoursRandomly(dateISO, dayInfo, hoursNeeded) {
   const { segments } = dayInfo;
 
   const segmentsCapacityMins = segments.reduce((s, seg) => s + (seg.to - seg.from), 0);
-  const requestedWorkMins    = Math.round(hoursNeeded * 60);
-  const workMinutes          = Math.min(requestedWorkMins, segmentsCapacityMins);
+  const requestedWorkMins = Math.round(hoursNeeded * 60);
+  const workMinutes = Math.min(requestedWorkMins, segmentsCapacityMins);
 
-  // Política simple: entrada fija a la hora de inicio del 1er segmento
   const start = segments[0].from;
 
   let remaining = workMinutes;
-  let cursor    = start;
-  const blocks  = [];
+  let cursor = start;
+  const blocks = [];
 
   for (const seg of segments) {
     if (cursor < seg.from) cursor = seg.from;
@@ -121,12 +121,12 @@ function allocateHoursRandomly(dateISO, dayInfo, hoursNeeded) {
 
     blocks.push({
       start: `${dateISO}T${minutesToHM(cursor)}:00`,
-      end:   `${dateISO}T${minutesToHM(cursor + take)}:00`,
-      hours: take / 60, // horas efectivas
+      end: `${dateISO}T${minutesToHM(cursor + take)}:00`,
+      hours: take / 60,
     });
 
-    cursor    += take;
-    remaining  = Math.max(0, remaining - take);
+    cursor += take;
+    remaining = Math.max(0, remaining - take);
     if (remaining <= 0) break;
   }
 
@@ -134,8 +134,8 @@ function allocateHoursRandomly(dateISO, dayInfo, hoursNeeded) {
     return { blocks: [], used: 0, entryTime: null, exitTime: null };
   }
 
-  const entryTime = blocks[0].start.slice(11, 16); // "HH:MM"
-  const exitTime  = blocks[blocks.length - 1].end.slice(11, 16);
+  const entryTime = blocks[0].start.slice(11, 16);
+  const exitTime = blocks[blocks.length - 1].end.slice(11, 16);
 
   return {
     blocks,
@@ -146,72 +146,79 @@ function allocateHoursRandomly(dateISO, dayInfo, hoursNeeded) {
 }
 
 // ========================
-// Capacidad "visible" por día (para validaciones de edición)
+// Capacidad "visible" por día
 // ========================
 export function getDailyCapacity(wd, isHoliday, holidayOverride) {
   if (isHoliday && holidayOverride === 'work') return HOLIDAY_HOURS;
   if (wd === 6) return 8;
   if (wd >= 1 && wd <= 5) return 10;
-  return 0; // Domingo u otros no laborables
+  return 0;
 }
 
 // ========================
-// Generación semanal completa (devuelve array de semanas)
-// Firma compatible con tu controller:
-// generateScheduleForRange56(fecha_inicio, fecha_fin, working_weekdays, holidaySet, holidayOverrides)
-// - working_weekdays: [1..6]
-// - holidaySet: Set<string YMD>
-// - holidayOverrides: { [ymd]: 'work' | 'skip' }
+// Generación semanal completa
 // ========================
 export function generateScheduleForRange56(
   fechaInicio,
   fechaFin,
   workingWeekdays,
   holidaySet,
-  holidayOverrides = {}
+  holidayOverrides = {},
+  sundayOverrides = {} // Nuevo: Aceptar los overrides del domingo
 ) {
   const outWeeks = [];
   let cursor = startOfISOWeek(new Date(fechaInicio));
   const rangeStart = new Date(fechaInicio);
-  const rangeEnd   = new Date(fechaFin);
+  const rangeEnd = new Date(fechaFin);
 
   while (cursor <= rangeEnd) {
     const weekStart = new Date(cursor);
-    const weekEnd   = addDays(weekStart, 6);
+    const weekEnd = addDays(weekStart, 6);
 
-    // Reunir días hábiles de esta semana dentro del rango
     const workableDays = [];
     for (let i = 0; i < 7; i++) {
-      const d   = addDays(weekStart, i);
+      const d = addDays(weekStart, i);
       const ymd = YMD(d);
       if (d < rangeStart || d > rangeEnd) continue;
 
-      const wd = isoWeekday(d); // 1..7
-      if (!workingWeekdays.includes(wd)) continue;
+      const wd = isoWeekday(d);
+      const isSunday = wd === 7;
+      if (!workingWeekdays.includes(isSunday ? 0 : wd)) continue;
 
       const isHoliday = holidaySet?.has?.(ymd) || false;
-      const override  = holidayOverrides[ymd];
+      const override = holidayOverrides[ymd];
 
-      if (isHoliday && override === 'skip') continue; // festivo omitido
+      if (isHoliday && override === 'skip') continue;
+
+      const sundayStatus = sundayOverrides[ymd];
+      if (isSunday && !sundayStatus) continue;
 
       const info = getDayInfo(wd, isHoliday, override);
       const capacity = info.capacity || 0;
-      if (capacity <= 0) continue;
 
-      workableDays.push({ date: d, ymd, wd, isHoliday, override, capacity, info });
+      if (capacity <= 0 && !isSunday) continue;
+
+      workableDays.push({
+        date: d,
+        ymd,
+        wd,
+        isHoliday,
+        override,
+        capacity,
+        info,
+        sundayStatus: sundayStatus || null,
+      });
     }
 
-    // Distribuir horas semanales
-    const dayTotals = new Map(); // ymd -> { base, extra, total }
+    const dayTotals = new Map();
     for (const x of workableDays) {
       dayTotals.set(x.ymd, { base: 0, extra: 0, total: 0 });
     }
 
-    // 1) Asignar legales hasta 44h
-    let legalLeft = WEEKLY_LEGAL_LIMIT; // 44
+    let legalLeft = WEEKLY_LEGAL_LIMIT;
     for (const x of workableDays) {
       if (legalLeft <= 0) break;
-      const maxLegalToday = Math.min(DAILY_LEGAL_LIMIT, x.capacity); // <= 8 y <= capacidad del día
+      const maxLegalToday = Math.min(DAILY_LEGAL_LIMIT, x.capacity);
       const give = Math.min(maxLegalToday, legalLeft);
       if (give > 0) {
         dayTotals.get(x.ymd).base = give;
@@ -219,30 +226,27 @@ export function generateScheduleForRange56(
       }
     }
 
-    // 2) Asignar extras hasta 12h
-    let extraLeft = WEEKLY_EXTRA_LIMIT; // 12
+    let extraLeft = WEEKLY_EXTRA_LIMIT;
     while (extraLeft > 0) {
       let progress = false;
       for (const x of workableDays) {
         if (extraLeft <= 0) break;
         const totals = dayTotals.get(x.ymd);
         const current = (totals.base || 0) + (totals.extra || 0);
-        if (current >= x.capacity) continue; // no cabe más
+        if (current >= x.capacity) continue;
 
-        totals.extra += 1; // asigno de a 1h para respetar topes
-        extraLeft    -= 1;
-        progress      = true;
+        totals.extra += 1;
+        extraLeft -= 1;
+        progress = true;
         if (extraLeft <= 0) break;
       }
-      if (!progress) break; // no cabe más extra en nadie
+      if (!progress) break;
     }
 
-    // Construir 'dias' con bloques y jornada
     const dias = [];
     for (const x of workableDays) {
       const totals = dayTotals.get(x.ymd) || { base: 0, extra: 0 };
-      const total  = (totals.base || 0) + (totals.extra || 0);
-      if (total <= 0) continue;
+      const total = (totals.base || 0) + (totals.extra || 0);
 
       const { blocks, entryTime, exitTime } = allocateHoursRandomly(x.ymd, x.info, total);
 
@@ -255,13 +259,14 @@ export function generateScheduleForRange56(
         bloques: blocks,
         jornada_entrada: entryTime || null,
         jornada_salida: exitTime || null,
+        domingo_estado: x.sundayStatus,
       });
     }
 
     outWeeks.push({
       fecha_inicio: format(weekStart, 'yyyy-MM-dd'),
-      fecha_fin:    format(weekEnd,   'yyyy-MM-dd'),
-      dias:         dias.sort((a, b) => a.fecha.localeCompare(b.fecha)),
+      fecha_fin: format(weekEnd, 'yyyy-MM-dd'),
+      dias: dias.sort((a, b) => a.fecha.localeCompare(b.fecha)),
       total_horas_semana: dias.reduce((s, d) => s + (Number(d.horas) || 0), 0),
     });
 
@@ -272,10 +277,10 @@ export function generateScheduleForRange56(
 }
 
 // ========================
-// Exports legacy (compat con controller)
+// Exports
 // ========================
-export const WEEKLY_BASE  = WEEKLY_LEGAL_LIMIT; // 44
-export const WEEKLY_EXTRA = WEEKLY_EXTRA_LIMIT; // 12
-export const WEEKLY_TOTAL = WEEKLY_TOTAL_LIMIT; // 56
+export const WEEKLY_BASE = WEEKLY_LEGAL_LIMIT;
+export const WEEKLY_EXTRA = WEEKLY_EXTRA_LIMIT;
+export const WEEKLY_TOTAL = WEEKLY_TOTAL_LIMIT;
 
-export { getDayInfo }; // útil en tests si lo necesitas
+export { getDayInfo };
