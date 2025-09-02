@@ -1,4 +1,3 @@
-// src/utils/schedule.js
 import {
   startOfWeek as dfStartOfWeek,
   addWeeks,
@@ -65,7 +64,6 @@ function getDayInfo(wd, isHoliday, holidayOverride) {
     };
   }
 
-  // Nuevo: Manejar el domingo, sin capacidad de horas
   if (wd === 7) {
     return {
       capacity: 0,
@@ -80,7 +78,8 @@ function getDayInfo(wd, isHoliday, holidayOverride) {
     segments: [
       { from: hmToMinutes('07:00'), to: hmToMinutes('09:00') },
       { from: hmToMinutes('09:15'), to: hmToMinutes('12:00') },
-      { from: hmToMinutes('12:45'), to: hmToMinutes(wd === 6 ? '16:00' : '18:00') },
+      // ✅ Ajuste para que la salida del sábado sea a las 15:00
+      { from: hmToMinutes('12:45'), to: hmToMinutes(wd === 6 ? '15:00' : '18:00') },
     ],
     breaks: [
       { start: hmToMinutes('09:00'), duration: BREAKFAST_MINUTES },
@@ -164,7 +163,7 @@ export function generateScheduleForRange56(
   workingWeekdays,
   holidaySet,
   holidayOverrides = {},
-  sundayOverrides = {} // Nuevo: Aceptar los overrides del domingo
+  sundayOverrides = {}
 ) {
   const outWeeks = [];
   let cursor = startOfISOWeek(new Date(fechaInicio));
