@@ -28,7 +28,7 @@ export const createHorario = async (req, res) => {
   try {
     const {
       empleado_id,
-      fecha_inicio, // <-- CORRECTION: ADDED THIS LINE
+      fecha_inicio,
       fecha_fin,
       working_weekdays,
       holiday_overrides,
@@ -48,7 +48,7 @@ export const createHorario = async (req, res) => {
       working_weekdays,
       holidaySet,
       holiday_overrides || {},
-      { [fecha_inicio]: sunday_override } // <-- CORRECTION: USED fecha_inicio VARIABLE
+      { [format(new Date(fechaInicio), "yyyy-MM-dd")]: sunday_override }
     );
 
     const payloadSemanales = horariosSemanales.map((horario) => ({

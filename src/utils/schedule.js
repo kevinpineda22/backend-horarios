@@ -175,7 +175,7 @@ export function generateScheduleForRange56(
 
     const dias = [];
     const workableDays = [];
-    let domingoEstado = null; // Variable para almacenar el estado del domingo para la semana
+    let domingoEstado = null;
 
     // Paso 1: Iterar todos los 7 días de la semana
     for (let i = 0; i < 7; i++) {
@@ -188,6 +188,7 @@ export function generateScheduleForRange56(
       const isHoliday = holidaySet?.has?.(ymd) || false;
       const holidayOverride = holidayOverrides[ymd];
 
+      // Ignorar festivos que se deciden no trabajar
       if (isHoliday && holidayOverride === 'skip') continue;
 
       if (isSunday) {
