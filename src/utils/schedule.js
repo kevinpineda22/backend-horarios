@@ -78,7 +78,6 @@ function getDayInfo(wd, isHoliday, holidayOverride) {
     segments: [
       { from: hmToMinutes('07:00'), to: hmToMinutes('09:00') },
       { from: hmToMinutes('09:15'), to: hmToMinutes('12:00') },
-      // Modificación aquí: la jornada del sábado ahora va hasta las 3pm.
       { from: hmToMinutes('12:45'), to: hmToMinutes(wd === 6 ? '15:00' : '18:00') },
     ],
     breaks: [
