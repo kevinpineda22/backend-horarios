@@ -175,8 +175,9 @@ export function generateScheduleForRange56(
 
     const dias = [];
     const workableDays = [];
+    let domingoEstado = null; // Variable para almacenar el estado del domingo para la semana
 
-    // Paso 1: Iterar todos los 7 días de la semana y procesar cada uno
+    // Paso 1: Iterar todos los 7 días de la semana
     for (let i = 0; i < 7; i++) {
       const d = addDays(weekStart, i);
       const ymd = YMD(d);
@@ -187,27 +188,16 @@ export function generateScheduleForRange56(
       const isHoliday = holidaySet?.has?.(ymd) || false;
       const holidayOverride = holidayOverrides[ymd];
 
-      // Ignorar festivos que se deciden no trabajar
       if (isHoliday && holidayOverride === 'skip') continue;
 
-      // Lógica para el domingo
-      if (isSunday && workingWeekdays.includes(0)) {
-        const sundayStatus = sundayOverrides[ymd];
-        if (sundayStatus) {
-            dias.push({
-                fecha: ymd,
-                descripcion: WD_NAME[wd],
-                domingo_estado: sundayStatus,
-                horas: (sundayStatus === 'compensado') ? 8 : 0,
-                horas_base: 0,
-                horas_extra: 0,
-                bloques: null,
-                jornada_entrada: null,
-                jornada_salida: null,
-            });
+      if (isSunday) {
+        if (workingWeekdays.includes(0)) {
+          const sundayStatus = sundayOverrides[ymd];
+          if (sundayStatus) {
+            domingoEstado = sundayStatus;
+          }
         }
-      } else if (!isSunday && (workingWeekdays.includes(wd) || (isHoliday && holidayOverride === 'work'))) {
-        // Lógica para días de semana y sábados
+      } else if (workingWeekdays.includes(wd) || (isHoliday && holidayOverride === 'work')) {
         const info = getDayInfo(wd, isHoliday, holidayOverride);
         const capacity = info.capacity || 0;
         
@@ -225,7 +215,7 @@ export function generateScheduleForRange56(
       }
     }
 
-    // Paso 2: Distribuir horas legales y extras solo entre los días laborables (lun-sáb)
+    // Paso 2: Distribuir horas legales y extras entre días laborables (lun-sáb)
     const dayTotals = new Map();
     for (const x of workableDays) {
       dayTotals.set(x.ymd, { base: 0, extra: 0, total: 0 });
@@ -259,7 +249,7 @@ export function generateScheduleForRange56(
       if (!progress) break;
     }
 
-    // Paso 3: Construir los objetos de día para días laborables (lun-sáb) y agregarlos
+    // Paso 3: Construir los objetos de día para días laborables y añadirlos al array 'dias'
     for(const x of workableDays) {
       const totals = dayTotals.get(x.ymd) || { base: 0, extra: 0 };
       const total = (totals.base || 0) + (totals.extra || 0);
@@ -274,15 +264,15 @@ export function generateScheduleForRange56(
         bloques: blocks,
         jornada_entrada: entryTime || null,
         jornada_salida: exitTime || null,
-        domingo_estado: null, // No aplica para estos días
       });
     }
-    
-    // Paso 4: Construir el objeto de la semana con todos los días (ya se agregaron arriba)
+
+    // Paso 4: Construir el objeto de la semana final
     outWeeks.push({
       fecha_inicio: format(weekStart, 'yyyy-MM-dd'),
       fecha_fin: format(weekEnd, 'yyyy-MM-dd'),
       dias: dias.sort((a, b) => a.fecha.localeCompare(b.fecha)),
+      domingo_estado: domingoEstado,
       total_horas_semana: dias.reduce((s, d) => s + (Number(d.horas) || 0), 0),
     });
 

@@ -31,7 +31,7 @@ export const createHorario = async (req, res) => {
       fecha_fin,
       working_weekdays,
       holiday_overrides,
-      sunday_overrides,
+      sunday_override,
     } = req.body;
     const lider_id = req.user.id;
 
@@ -47,16 +47,20 @@ export const createHorario = async (req, res) => {
       working_weekdays,
       holidaySet,
       holiday_overrides || {},
-      sunday_overrides || {}
+      { [format(new Date(fechaInicio), "yyyy-MM-dd")]: sunday_override }
     );
 
     const payloadSemanales = horariosSemanales.map((horario) => ({
       empleado_id,
       lider_id,
       tipo: "semanal",
-      ...horario,
+      domingo_estado: horario.domingo_estado,
+      dias: horario.dias,
+      fecha_inicio: horario.fecha_inicio,
+      fecha_fin: horario.fecha_fin,
+      total_horas_semana: horario.total_horas_semana
     }));
-
+    
     const { data: dataSemanales, error: errorSemanales } = await supabaseAxios.post("/horarios", payloadSemanales);
     if (errorSemanales) throw errorSemanales;
 
