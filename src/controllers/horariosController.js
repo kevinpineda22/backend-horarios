@@ -42,13 +42,18 @@ export const createHorario = async (req, res) => {
 
     const holidaySet = getHolidaySet(fecha_inicio, fecha_fin);
 
+    const sundayOverrides = {};
+    if (sunday_override) {
+      sundayOverrides[fecha_inicio] = sunday_override;
+    }
+
     const { schedule: horariosSemanales } = generateScheduleForRange56(
       fecha_inicio,
       fecha_fin,
       working_weekdays,
       holidaySet,
       holiday_overrides || {},
-      { [format(new Date(fechaInicio), "yyyy-MM-dd")]: sunday_override }
+      sundayOverrides
     );
 
     const payloadSemanales = horariosSemanales.map((horario) => ({

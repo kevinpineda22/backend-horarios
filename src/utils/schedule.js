@@ -177,7 +177,6 @@ export function generateScheduleForRange56(
     const workableDays = [];
     let domingoEstado = null;
 
-    // Paso 1: Iterar todos los 7 días de la semana
     for (let i = 0; i < 7; i++) {
       const d = addDays(weekStart, i);
       const ymd = YMD(d);
@@ -188,7 +187,6 @@ export function generateScheduleForRange56(
       const isHoliday = holidaySet?.has?.(ymd) || false;
       const holidayOverride = holidayOverrides[ymd];
 
-      // Ignorar festivos que se deciden no trabajar
       if (isHoliday && holidayOverride === 'skip') continue;
 
       if (isSunday) {
@@ -216,7 +214,6 @@ export function generateScheduleForRange56(
       }
     }
 
-    // Paso 2: Distribuir horas legales y extras entre días laborables (lun-sáb)
     const dayTotals = new Map();
     for (const x of workableDays) {
       dayTotals.set(x.ymd, { base: 0, extra: 0, total: 0 });
@@ -250,7 +247,6 @@ export function generateScheduleForRange56(
       if (!progress) break;
     }
 
-    // Paso 3: Construir los objetos de día para días laborables y añadirlos al array 'dias'
     for(const x of workableDays) {
       const totals = dayTotals.get(x.ymd) || { base: 0, extra: 0 };
       const total = (totals.base || 0) + (totals.extra || 0);
@@ -268,7 +264,23 @@ export function generateScheduleForRange56(
       });
     }
 
-    // Paso 4: Construir el objeto de la semana final
+    // Si el domingo es laborable, lo agregamos al array de días con sus horas
+    if (domingoEstado) {
+      const sundayDate = addDays(weekStart, 6);
+      const sundayYMD = YMD(sundayDate);
+      dias.push({
+          fecha: sundayYMD,
+          descripcion: WD_NAME[isoWeekday(sundayDate)],
+          domingo_estado: domingoEstado,
+          horas: (domingoEstado === 'compensado') ? 8 : 0,
+          horas_base: 0,
+          horas_extra: 0,
+          bloques: null,
+          jornada_entrada: null,
+          jornada_salida: null,
+      });
+    }
+
     outWeeks.push({
       fecha_inicio: format(weekStart, 'yyyy-MM-dd'),
       fecha_fin: format(weekEnd, 'yyyy-MM-dd'),
