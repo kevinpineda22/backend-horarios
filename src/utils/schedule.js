@@ -72,7 +72,7 @@ function getDayInfo(wd, isHoliday, holidayOverride) {
     };
   }
 
-  const weekdayCapacity = wd === 6 ? 8 : 10;
+  const weekdayCapacity = wd === 6 ? 7 : 10;
   const info = {
     capacity: weekdayCapacity,
     segments: [
@@ -148,7 +148,7 @@ function allocateHoursRandomly(dateISO, dayInfo, hoursNeeded) {
 // ========================
 export function getDailyCapacity(wd, isHoliday, holidayOverride) {
   if (isHoliday && holidayOverride === 'work') return HOLIDAY_HOURS;
-  if (wd === 6) return 8;
+  if (wd === 6) return 7;
   if (wd >= 1 && wd <= 5) return 10;
   return 0;
 }
