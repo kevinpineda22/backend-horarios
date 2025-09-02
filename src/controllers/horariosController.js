@@ -73,7 +73,7 @@ export const createHorario = async (req, res) => {
     // Verificación final del payload
     console.log('Payload a enviar:', JSON.stringify(payload, null, 2));
 
-    const { data, error } = await supabaseAxos.post("/horarios", payload);
+    const { data, error } = await supabaseAxios.post("/horarios", payload);
     if (error) throw error;
 
     // Log de respuesta
