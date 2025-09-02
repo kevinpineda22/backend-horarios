@@ -14,17 +14,17 @@ export const getHorariosByEmpleadoId = async (req, res) => {
   const { empleado_id } = req.params;
   try {
     const url = `/horarios?select=*&empleado_id=eq.${empleado_id}&order=fecha_inicio.desc`;
-    const { data: horariosSemanales } = await supabaseAxios.get(url);
+    const { data: horariosSemanales, error: semanalError } = await supabaseAxios.get(url);
+    if (semanalError) throw semanalError;
     
     const urlDomingos = `/horarios_domingos?select=*&empleado_id=eq.${empleado_id}&order=fecha.desc`;
-    const { data: horariosDomingos } = await supabaseAxios.get(urlDomingos);
+    const { data: horariosDomingos, error: domingosError } = await supabaseAxios.get(urlDomingos);
+    if (domingosError) throw domingosError;
 
     const combinedData = {
       horariosSemanales: horariosSemanales,
       horariosDomingos: horariosDomingos
     };
-    
-    console.log('Horarios recuperados:', JSON.stringify(combinedData, null, 2));
     
     res.json(combinedData);
   } catch (e) {
@@ -45,13 +45,6 @@ export const createHorario = async (req, res) => {
     } = req.body;
     const lider_id = req.user.id;
 
-    console.log('=== CREACIÓN DE HORARIO ===');
-    console.log('Empleado:', empleado_id);
-    console.log('Fecha inicio:', fecha_inicio);
-    console.log('Fecha fin:', fecha_fin);
-    console.log('Días laborables:', working_weekdays);
-    console.log('Domingos override:', sunday_overrides);
-
     if (!Array.isArray(working_weekdays) || working_weekdays.length === 0) {
       return res.status(400).json({ message: "working_weekdays es requerido." });
     }
@@ -67,9 +60,6 @@ export const createHorario = async (req, res) => {
       sunday_overrides || {}
     );
 
-    console.log('Horarios semanales generados:', JSON.stringify(horariosSemanales, null, 2));
-    console.log('Datos de domingos generados:', JSON.stringify(sundayData, null, 2));
-
     const payloadSemanales = horariosSemanales.map((horario) => ({
       empleado_id,
       lider_id,
@@ -77,19 +67,18 @@ export const createHorario = async (req, res) => {
       ...horario,
     }));
 
-    const payloadDomingos = sundayData.map(domingo => {
-      return {
-        id: uuidv4(),
-        empleado_id,
-        lider_id,
-        fecha: domingo.fecha,
-        domingo_estado: domingo.domingo_estado,
-        horas: domingo.horas
-      };
-    });
-
-    console.log('Payload semanales a enviar:', JSON.stringify(payloadSemanales, null, 2));
-    console.log('Payload domingos a enviar:', JSON.stringify(payloadDomingos, null, 2));
+    const payloadDomingos = sundayData
+      .filter(domingo => domingo.domingo_estado !== undefined && domingo.domingo_estado !== null)
+      .map(domingo => {
+        return {
+          id: uuidv4(),
+          empleado_id,
+          lider_id,
+          fecha: domingo.fecha,
+          domingo_estado: domingo.domingo_estado,
+          horas: domingo.horas
+        };
+      });
 
     const { data: dataSemanales, error: errorSemanales } = await supabaseAxios.post("/horarios", payloadSemanales);
     if (errorSemanales) throw errorSemanales;
@@ -100,10 +89,6 @@ export const createHorario = async (req, res) => {
       if (dError) throw dError;
       dataDomingos = dData;
     }
-
-    console.log('Respuesta de creación de horarios semanales:', dataSemanales);
-    console.log('Respuesta de creación de horarios de domingos:', dataDomingos);
-    console.log('=== FIN CREACIÓN ===');
 
     res.status(201).json({ horariosSemanales: dataSemanales, horariosDomingos: dataDomingos });
   } catch (e) {
@@ -120,10 +105,6 @@ export const updateHorario = async (req, res) => {
   const { id } = req.params;
   const p = req.body;
   try {
-    console.log('=== ACTUALIZACIÓN DE HORARIO ===');
-    console.log('ID:', id);
-    console.log('Datos recibidos:', JSON.stringify(p, null, 2));
-
     const { data: [current] } = await supabaseAxios.get(`/horarios?select=*&id=eq.${id}`);
     if (!current) return res.status(404).json({ message: "Horario no encontrado" });
 
@@ -157,10 +138,7 @@ export const updateHorario = async (req, res) => {
     const totalSemana = newDias.reduce((s, x) => s + Number(x.horas || 0), 0);
     const updatePayload = { ...p, dias: newDias, total_horas_semana: totalSemana };
     
-    console.log('Payload de actualización:', JSON.stringify(updatePayload, null, 2));
-    
     await supabaseAxios.patch(`/horarios?id=eq.${id}`, updatePayload);
-    console.log('=== FIN ACTUALIZACIÓN ===');
     
     res.json({ message: "Updated" });
   } catch (e) {
@@ -172,9 +150,7 @@ export const updateHorario = async (req, res) => {
 export const deleteHorario = async (req, res) => {
   const { id } = req.params;
   try {
-    console.log('Eliminando horario:', id);
     await supabaseAxios.delete(`/horarios?id=eq.${id}`);
-    console.log('Horario eliminado con éxito:', id);
     res.json({ message: "Deleted" });
   } catch (e) {
     console.error("Error eliminando horario:", e);

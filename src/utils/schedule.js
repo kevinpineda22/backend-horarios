@@ -175,7 +175,6 @@ export function generateScheduleForRange56(
     const weekEnd = addDays(weekStart, 6);
 
     const workableDays = [];
-    const thisWeekSundays = [];
 
     for (let i = 0; i < 7; i++) {
       const d = addDays(weekStart, i);
@@ -189,11 +188,13 @@ export function generateScheduleForRange56(
       const holidayOverride = holidayOverrides[ymd];
       if (isHoliday && holidayOverride === 'skip') continue;
 
+      // **CORRECCIÓN**
       if (isSunday) {
-        const sundayStatus = sundayOverrides[ymd];
-        if (sundayStatus) {
+        // Si el domingo es un día laborable y tiene un override
+        if (workingWeekdays.includes(0) && sundayOverrides[ymd]) {
+          const sundayStatus = sundayOverrides[ymd];
           const capacity = (sundayStatus === 'compensado') ? 8 : 0;
-          thisWeekSundays.push({
+          sundayData.push({
             fecha: ymd,
             descripcion: WD_NAME[wd],
             domingo_estado: sundayStatus,
@@ -202,6 +203,7 @@ export function generateScheduleForRange56(
         }
         continue;
       }
+      // **FIN CORRECCIÓN**
 
       if (workingWeekdays.includes(wd) || (isHoliday && holidayOverride === 'work')) {
         const info = getDayInfo(wd, isHoliday, holidayOverride);
@@ -279,10 +281,6 @@ export function generateScheduleForRange56(
       dias: dias.sort((a, b) => a.fecha.localeCompare(b.fecha)),
       total_horas_semana: dias.reduce((s, d) => s + (Number(d.horas) || 0), 0),
     });
-
-    if (thisWeekSundays.length > 0) {
-      sundayData.push(...thisWeekSundays);
-    }
 
     cursor = addWeeks(weekStart, 1);
   }
