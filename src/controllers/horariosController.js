@@ -12,13 +12,23 @@ import { getHolidaySet } from "../utils/holidays.js";
 export const getHorariosByEmpleadoId = async (req, res) => {
   const { empleado_id } = req.params;
   try {
+    // Se obtienen los horarios semanales
     const url = `/horarios?select=*&empleado_id=eq.${empleado_id}&order=fecha_inicio.desc`;
-    const { data } = await supabaseAxios.get(url);
+    const { data: horariosSemanales } = await supabaseAxios.get(url);
+    
+    // Se obtienen los registros de domingos
+    const urlDomingos = `/horarios_domingos?select=*&empleado_id=eq.${empleado_id}&order=fecha.desc`;
+    const { data: horariosDomingos } = await supabaseAxios.get(urlDomingos);
+
+    const combinedData = {
+      horariosSemanales: horariosSemanales,
+      horariosDomingos: horariosDomingos
+    };
     
     // Log para depuración
-    console.log('Horarios recuperados:', JSON.stringify(data, null, 2));
+    console.log('Horarios recuperados:', JSON.stringify(combinedData, null, 2));
     
-    res.json(data);
+    res.json(combinedData);
   } catch (e) {
     console.error('Error completo:', e);
     res.status(500).json({ message: "Error fetching horarios" });
@@ -51,7 +61,8 @@ export const createHorario = async (req, res) => {
 
     const holidaySet = getHolidaySet(fecha_inicio, fecha_fin);
 
-    const horariosSemanales = generateScheduleForRange56(
+    // Se llama a la nueva función que retorna el horario y los domingos por separado
+    const { schedule: horariosSemanales, sundayData } = generateScheduleForRange56(
       fecha_inicio,
       fecha_fin,
       working_weekdays,
@@ -61,26 +72,42 @@ export const createHorario = async (req, res) => {
     );
 
     // Log de horarios generados
-    console.log('Horarios generados:', JSON.stringify(horariosSemanales, null, 2));
+    console.log('Horarios semanales generados:', JSON.stringify(horariosSemanales, null, 2));
+    console.log('Datos de domingos generados:', JSON.stringify(sundayData, null, 2));
 
-    const payload = horariosSemanales.map((horario) => ({
+    const payloadSemanales = horariosSemanales.map((horario) => ({
       empleado_id,
       lider_id,
       tipo: "semanal",
       ...horario,
     }));
 
-    // Verificación final del payload
-    console.log('Payload a enviar:', JSON.stringify(payload, null, 2));
+    const payloadDomingos = sundayData.map(domingo => ({
+      empleado_id,
+      lider_id,
+      ...domingo,
+    }));
 
-    const { data, error } = await supabaseAxios.post("/horarios", payload);
-    if (error) throw error;
+    // Verificación final del payload
+    console.log('Payload semanales a enviar:', JSON.stringify(payloadSemanales, null, 2));
+    console.log('Payload domingos a enviar:', JSON.stringify(payloadDomingos, null, 2));
+
+    const { data: dataSemanales, error: errorSemanales } = await supabaseAxios.post("/horarios", payloadSemanales);
+    if (errorSemanales) throw errorSemanales;
+
+    let dataDomingos = [];
+    if (payloadDomingos.length > 0) {
+      const { data: dData, error: dError } = await supabaseAxios.post("/horarios_domingos", payloadDomingos);
+      if (dError) throw dError;
+      dataDomingos = dData;
+    }
 
     // Log de respuesta
-    console.log('Respuesta de creación:', data);
+    console.log('Respuesta de creación de horarios semanales:', dataSemanales);
+    console.log('Respuesta de creación de horarios de domingos:', dataDomingos);
     console.log('=== FIN CREACIÓN ===');
 
-    res.status(201).json(data);
+    res.status(201).json({ horariosSemanales: dataSemanales, horariosDomingos: dataDomingos });
   } catch (e) {
     console.error("Error detallado en createHorario:", e);
     res.status(500).json({ 
@@ -105,13 +132,6 @@ export const updateHorario = async (req, res) => {
     const newDias = p.dias || current.dias;
     const byWeek = new Map();
     
-    // Verificar estado de domingos
-    newDias.forEach(d => {
-      if (isoWeekday(new Date(d.fecha)) === 7) {
-        console.log('Domingo encontrado:', d.fecha, 'Estado:', d.domingo_estado);
-      }
-    });
-
     for (const d of newDias) {
       const wd = isoWeekday(new Date(d.fecha));
       const cap = getDailyCapacity(wd, false, null);
