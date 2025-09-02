@@ -9,7 +9,7 @@ import {
 } from "../utils/schedule.js";
 import { getHolidaySet } from "../utils/holidays.js";
 import { v4 as uuidv4 } from 'uuid';
-import { format } from 'date-fns'; // <-- LÍNEA AGREGADA
+import { format } from 'date-fns';
 
 export const getHorariosByEmpleadoId = async (req, res) => {
   const { empleado_id } = req.params;
@@ -28,7 +28,7 @@ export const createHorario = async (req, res) => {
   try {
     const {
       empleado_id,
-      fecha_inicio,
+      fecha_inicio, // <-- CORRECTION: ADDED THIS LINE
       fecha_fin,
       working_weekdays,
       holiday_overrides,
@@ -48,7 +48,7 @@ export const createHorario = async (req, res) => {
       working_weekdays,
       holidaySet,
       holiday_overrides || {},
-      { [format(new Date(fechaInicio), "yyyy-MM-dd")]: sunday_override }
+      { [fecha_inicio]: sunday_override } // <-- CORRECTION: USED fecha_inicio VARIABLE
     );
 
     const payloadSemanales = horariosSemanales.map((horario) => ({
