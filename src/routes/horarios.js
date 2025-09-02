@@ -17,25 +17,14 @@ router.get('/:empleado_id', ctrl.getHorariosByEmpleadoId);
 /**
  * POST /api/horarios
  * Crea horario(s) semanal(es) automático(s).
- * Body:
- * {
- *   empleado_id: "<uuid>",
- *   fecha_inicio: "YYYY-MM-DD",
- *   fecha_fin: "YYYY-MM-DD",
- *   working_weekdays: [2,3,4,5,6],     // 1..7 => Lun..Dom
- *   worked_holidays: ["YYYY-MM-DD"]    // festivos que SÍ se trabajan (08:00–13:00)
- * }
- * Reglas:
- *  - Base diaria real = 8h (Sáb 8h). Festivo trabajado = 5h.
- *  - Extras objetivo 12h/semana (si no alcanza por capacidad/festivos, se crea igual con warning).
  */
 router.post('/', ctrl.createHorario);
 
 /**
- * PUT /api/horarios/:id
- * Actualiza un horario existente (valida capacidad diaria y extras ≤ 12h/semana)
+ * PATCH /api/horarios/:id
+ * Actualiza un horario existente de forma parcial.
  */
-router.put('/:id', ctrl.updateHorario);
+router.patch('/:id', ctrl.updateHorario);
 
 /**
  * DELETE /api/horarios/:id

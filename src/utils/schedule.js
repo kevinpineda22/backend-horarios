@@ -188,9 +188,7 @@ export function generateScheduleForRange56(
       const holidayOverride = holidayOverrides[ymd];
       if (isHoliday && holidayOverride === 'skip') continue;
 
-      // **CORRECCIÓN**
       if (isSunday) {
-        // Si el domingo es un día laborable y tiene un override
         if (workingWeekdays.includes(0) && sundayOverrides[ymd]) {
           const sundayStatus = sundayOverrides[ymd];
           const capacity = (sundayStatus === 'compensado') ? 8 : 0;
@@ -203,7 +201,6 @@ export function generateScheduleForRange56(
         }
         continue;
       }
-      // **FIN CORRECCIÓN**
 
       if (workingWeekdays.includes(wd) || (isHoliday && holidayOverride === 'work')) {
         const info = getDayInfo(wd, isHoliday, holidayOverride);

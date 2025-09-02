@@ -14,12 +14,10 @@ export const getHorariosByEmpleadoId = async (req, res) => {
   const { empleado_id } = req.params;
   try {
     const url = `/horarios?select=*&empleado_id=eq.${empleado_id}&order=fecha_inicio.desc`;
-    const { data: horariosSemanales, error: semanalError } = await supabaseAxios.get(url);
-    if (semanalError) throw semanalError;
+    const { data: horariosSemanales } = await supabaseAxios.get(url);
     
     const urlDomingos = `/horarios_domingos?select=*&empleado_id=eq.${empleado_id}&order=fecha.desc`;
-    const { data: horariosDomingos, error: domingosError } = await supabaseAxios.get(urlDomingos);
-    if (domingosError) throw domingosError;
+    const { data: horariosDomingos } = await supabaseAxios.get(urlDomingos);
 
     const combinedData = {
       horariosSemanales: horariosSemanales,
