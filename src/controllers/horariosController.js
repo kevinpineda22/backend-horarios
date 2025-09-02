@@ -8,7 +8,7 @@ import {
   WEEKLY_BASE,
 } from "../utils/schedule.js";
 import { getHolidaySet } from "../utils/holidays.js";
-import { v4 as uuidv4 } from 'uuid'; // Importa la función para generar UUIDs
+import { v4 as uuidv4 } from 'uuid';
 
 export const getHorariosByEmpleadoId = async (req, res) => {
   const { empleado_id } = req.params;
@@ -77,12 +77,16 @@ export const createHorario = async (req, res) => {
       ...horario,
     }));
 
-    const payloadDomingos = sundayData.map(domingo => ({
-      id: uuidv4(), // Generar un ID único para cada domingo
-      empleado_id,
-      lider_id,
-      ...domingo,
-    }));
+    const payloadDomingos = sundayData.map(domingo => {
+      return {
+        id: uuidv4(),
+        empleado_id,
+        lider_id,
+        fecha: domingo.fecha,
+        domingo_estado: domingo.domingo_estado,
+        horas: domingo.horas
+      };
+    });
 
     console.log('Payload semanales a enviar:', JSON.stringify(payloadSemanales, null, 2));
     console.log('Payload domingos a enviar:', JSON.stringify(payloadDomingos, null, 2));
