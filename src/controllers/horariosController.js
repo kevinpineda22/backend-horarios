@@ -9,6 +9,7 @@ import {
 } from "../utils/schedule.js";
 import { getHolidaySet } from "../utils/holidays.js";
 import { v4 as uuidv4 } from 'uuid';
+import { format } from 'date-fns'; // <-- LÍNEA AGREGADA
 
 export const getHorariosByEmpleadoId = async (req, res) => {
   const { empleado_id } = req.params;
