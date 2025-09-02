@@ -165,7 +165,6 @@ export function generateScheduleForRange56(
   sundayOverrides = {}
 ) {
   const outWeeks = [];
-  const sundayData = [];
   let cursor = startOfISOWeek(new Date(fechaInicio));
   const rangeStart = new Date(fechaInicio);
   const rangeEnd = new Date(fechaFin);
@@ -175,6 +174,7 @@ export function generateScheduleForRange56(
     const weekEnd = addDays(weekStart, 6);
 
     const workableDays = [];
+    const thisWeekDomingos = [];
 
     for (let i = 0; i < 7; i++) {
       const d = addDays(weekStart, i);
@@ -189,15 +189,19 @@ export function generateScheduleForRange56(
       if (isHoliday && holidayOverride === 'skip') continue;
 
       if (isSunday) {
-        if (workingWeekdays.includes(0) && sundayOverrides[ymd]) {
-          const sundayStatus = sundayOverrides[ymd];
-          const capacity = (sundayStatus === 'compensado') ? 8 : 0;
-          sundayData.push({
-            fecha: ymd,
-            descripcion: WD_NAME[wd],
-            domingo_estado: sundayStatus,
-            horas: capacity,
-          });
+        const sundayStatus = sundayOverrides[ymd];
+        if (sundayStatus) {
+            thisWeekDomingos.push({
+                fecha: ymd,
+                descripcion: WD_NAME[wd],
+                domingo_estado: sundayStatus,
+                horas: (sundayStatus === 'compensado') ? 8 : 0,
+                horas_base: 0,
+                horas_extra: 0,
+                bloques: null,
+                jornada_entrada: null,
+                jornada_salida: null,
+            });
         }
         continue;
       }
@@ -272,6 +276,9 @@ export function generateScheduleForRange56(
       };
     });
 
+    // Se combinan los días normales y los domingos compensados
+    dias.push(...thisWeekDomingos);
+
     outWeeks.push({
       fecha_inicio: format(weekStart, 'yyyy-MM-dd'),
       fecha_fin: format(weekEnd, 'yyyy-MM-dd'),
@@ -282,7 +289,7 @@ export function generateScheduleForRange56(
     cursor = addWeeks(weekStart, 1);
   }
 
-  return { schedule: outWeeks, sundayData };
+  return { schedule: outWeeks };
 }
 
 // ========================

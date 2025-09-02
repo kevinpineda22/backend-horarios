@@ -14,17 +14,9 @@ export const getHorariosByEmpleadoId = async (req, res) => {
   const { empleado_id } = req.params;
   try {
     const url = `/horarios?select=*&empleado_id=eq.${empleado_id}&order=fecha_inicio.desc`;
-    const { data: horariosSemanales } = await supabaseAxios.get(url);
+    const { data } = await supabaseAxios.get(url);
     
-    const urlDomingos = `/horarios_domingos?select=*&empleado_id=eq.${empleado_id}&order=fecha.desc`;
-    const { data: horariosDomingos } = await supabaseAxios.get(urlDomingos);
-
-    const combinedData = {
-      horariosSemanales: horariosSemanales,
-      horariosDomingos: horariosDomingos
-    };
-    
-    res.json(combinedData);
+    res.json(data);
   } catch (e) {
     console.error('Error completo:', e);
     res.status(500).json({ message: "Error fetching horarios" });
@@ -49,7 +41,7 @@ export const createHorario = async (req, res) => {
 
     const holidaySet = getHolidaySet(fecha_inicio, fecha_fin);
 
-    const { schedule: horariosSemanales, sundayData } = generateScheduleForRange56(
+    const { schedule: horariosSemanales } = generateScheduleForRange56(
       fecha_inicio,
       fecha_fin,
       working_weekdays,
@@ -65,30 +57,10 @@ export const createHorario = async (req, res) => {
       ...horario,
     }));
 
-    const payloadDomingos = sundayData
-      .filter(domingo => domingo.domingo_estado !== undefined && domingo.domingo_estado !== null)
-      .map(domingo => {
-        return {
-          id: uuidv4(),
-          empleado_id,
-          lider_id,
-          fecha: domingo.fecha,
-          domingo_estado: domingo.domingo_estado,
-          horas: domingo.horas
-        };
-      });
-
     const { data: dataSemanales, error: errorSemanales } = await supabaseAxios.post("/horarios", payloadSemanales);
     if (errorSemanales) throw errorSemanales;
 
-    let dataDomingos = [];
-    if (payloadDomingos.length > 0) {
-      const { data: dData, error: dError } = await supabaseAxios.post("/horarios_domingos", payloadDomingos);
-      if (dError) throw dError;
-      dataDomingos = dData;
-    }
-
-    res.status(201).json({ horariosSemanales: dataSemanales, horariosDomingos: dataDomingos });
+    res.status(201).json(dataSemanales);
   } catch (e) {
     console.error("Error detallado en createHorario:", e);
     res.status(500).json({ 
