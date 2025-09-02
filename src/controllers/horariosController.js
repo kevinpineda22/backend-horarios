@@ -1,4 +1,3 @@
-// src/controllers/horariosController.js
 import { supabaseAxios } from "../services/supabaseAxios.js";
 import {
   generateScheduleForRange56,
@@ -15,9 +14,13 @@ export const getHorariosByEmpleadoId = async (req, res) => {
   try {
     const url = `/horarios?select=*&empleado_id=eq.${empleado_id}&order=fecha_inicio.desc`;
     const { data } = await supabaseAxios.get(url);
+    
+    // Log para depuración
+    console.log('Horarios recuperados:', JSON.stringify(data, null, 2));
+    
     res.json(data);
   } catch (e) {
-    console.error(e);
+    console.error('Error completo:', e);
     res.status(500).json({ message: "Error fetching horarios" });
   }
 };
@@ -30,9 +33,17 @@ export const createHorario = async (req, res) => {
       fecha_fin,
       working_weekdays,
       holiday_overrides,
-      sunday_overrides, // Nuevo: Recibir los overrides del domingo
+      sunday_overrides,
     } = req.body;
     const lider_id = req.user.id;
+
+    // Log inicial de datos recibidos
+    console.log('=== CREACIÓN DE HORARIO ===');
+    console.log('Empleado:', empleado_id);
+    console.log('Fecha inicio:', fecha_inicio);
+    console.log('Fecha fin:', fecha_fin);
+    console.log('Días laborables:', working_weekdays);
+    console.log('Domingos override:', sunday_overrides);
 
     if (!Array.isArray(working_weekdays) || working_weekdays.length === 0) {
       return res.status(400).json({ message: "working_weekdays es requerido." });
@@ -46,8 +57,11 @@ export const createHorario = async (req, res) => {
       working_weekdays,
       holidaySet,
       holiday_overrides || {},
-      sunday_overrides || {} // Nuevo: Pasar los overrides del domingo
+      sunday_overrides || {}
     );
+
+    // Log de horarios generados
+    console.log('Horarios generados:', JSON.stringify(horariosSemanales, null, 2));
 
     const payload = horariosSemanales.map((horario) => ({
       empleado_id,
@@ -56,13 +70,24 @@ export const createHorario = async (req, res) => {
       ...horario,
     }));
 
+    // Verificación final del payload
+    console.log('Payload a enviar:', JSON.stringify(payload, null, 2));
+
     const { data, error } = await supabaseAxios.post("/horarios", payload);
     if (error) throw error;
 
+    // Log de respuesta
+    console.log('Respuesta de creación:', data);
+    console.log('=== FIN CREACIÓN ===');
+
     res.status(201).json(data);
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ message: "Error creating horario", error: e.message });
+    console.error("Error detallado en createHorario:", e);
+    res.status(500).json({ 
+      message: "Error creating horario", 
+      error: e.message,
+      stack: process.env.NODE_ENV === 'development' ? e.stack : undefined 
+    });
   }
 };
 
@@ -70,11 +95,23 @@ export const updateHorario = async (req, res) => {
   const { id } = req.params;
   const p = req.body;
   try {
+    console.log('=== ACTUALIZACIÓN DE HORARIO ===');
+    console.log('ID:', id);
+    console.log('Datos recibidos:', JSON.stringify(p, null, 2));
+
     const { data: [current] } = await supabaseAxios.get(`/horarios?select=*&id=eq.${id}`);
     if (!current) return res.status(404).json({ message: "Horario no encontrado" });
 
     const newDias = p.dias || current.dias;
     const byWeek = new Map();
+    
+    // Verificar estado de domingos
+    newDias.forEach(d => {
+      if (isoWeekday(new Date(d.fecha)) === 7) {
+        console.log('Domingo encontrado:', d.fecha, 'Estado:', d.domingo_estado);
+      }
+    });
+
     for (const d of newDias) {
       const wd = isoWeekday(new Date(d.fecha));
       const cap = getDailyCapacity(wd, false, null);
@@ -98,11 +135,18 @@ export const updateHorario = async (req, res) => {
         return res.status(400).json({ message: `Máximo ${WEEKLY_EXTRA}h extra por semana (semana ${week}).` });
       }
     }
+
     const totalSemana = newDias.reduce((s, x) => s + Number(x.horas || 0), 0);
-    await supabaseAxios.patch(`/horarios?id=eq.${id}`, { ...p, dias: newDias, total_horas_semana: totalSemana });
+    const updatePayload = { ...p, dias: newDias, total_horas_semana: totalSemana };
+    
+    console.log('Payload de actualización:', JSON.stringify(updatePayload, null, 2));
+    
+    await supabaseAxios.patch(`/horarios?id=eq.${id}`, updatePayload);
+    console.log('=== FIN ACTUALIZACIÓN ===');
+    
     res.json({ message: "Updated" });
   } catch (e) {
-    console.error(e);
+    console.error("Error detallado en updateHorario:", e);
     res.status(500).json({ message: "Error updating horario" });
   }
 };
@@ -110,10 +154,12 @@ export const updateHorario = async (req, res) => {
 export const deleteHorario = async (req, res) => {
   const { id } = req.params;
   try {
+    console.log('Eliminando horario:', id);
     await supabaseAxios.delete(`/horarios?id=eq.${id}`);
+    console.log('Horario eliminado con éxito:', id);
     res.json({ message: "Deleted" });
   } catch (e) {
-    console.error(e);
+    console.error("Error eliminando horario:", e);
     res.status(500).json({ message: "Error deleting horario" });
   }
 };
