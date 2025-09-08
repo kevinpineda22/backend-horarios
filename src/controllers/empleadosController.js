@@ -29,20 +29,39 @@ const excelDateToJSDate = (dateValue) => {
     return dateValue || null;
 };
 
-// Lógica para parsear archivos CSV o XLSX usando la librería 'xlsx'.
+// --- FUNCIÓN 'parseFile' CORREGIDA ---
 const parseFile = async (file) => {
   return new Promise((resolve, reject) => {
     try {
+      // Usamos el parser de CSV si el tipo de archivo lo indica
+      const isCsv = file.originalname.endsWith('.csv');
       const workbook = xlsx.read(file.buffer, { type: 'buffer' });
       const sheetName = workbook.SheetNames[0];
-      const worksheet = xlsx.Sheets[sheetName];
-      const data = xlsx.utils.sheet_to_json(worksheet);
+      const worksheet = workbook.Sheets[sheetName];
+
+      let data;
+      if (isCsv) {
+        // Para CSV, usamos el formato de array de arrays y luego a JSON
+        data = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
+        const headers = data.shift(); // Saca los encabezados
+        data = data.map(row => {
+          const obj = {};
+          headers.forEach((header, index) => {
+            obj[header] = row[index];
+          });
+          return obj;
+        });
+      } else {
+        // Para Excel, el parser ya lo hace bien
+        data = xlsx.utils.sheet_to_json(worksheet);
+      }
       resolve(data);
     } catch (e) {
       reject(new Error('Error al parsear el archivo: ' + e.message));
     }
   });
 };
+
 
 /**
  * Función auxiliar para encontrar o crear una empresa/sede y devolver su UUID
