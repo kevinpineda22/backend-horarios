@@ -71,10 +71,11 @@ export const getEmpleados = async (req, res) => {
 
 /**
  * Endpoint para crear un nuevo empleado manualmente.
+ * Ahora 'rol' es opcional y se han añadido nuevos campos.
  */
 export const createEmpleado = async (req, res) => {
   try {
-    const { cedula, nombre_completo, rol, empresa_id, sede_id } = req.body;
+    const { cedula, nombre_completo, rol, empresa_id, sede_id, celular, correo_electronico, fecha_contratacion } = req.body;
 
     const empresaUuid = await findOrCreateId('empresas', empresa_id);
     const sedeUuid    = await findOrCreateId('sedes',    sede_id);
@@ -82,9 +83,12 @@ export const createEmpleado = async (req, res) => {
     const payload = {
       cedula,
       nombre_completo,
-      rol,
+      rol: rol || null, // Aseguramos que el rol sea nulo si no se envía
       empresa_id: empresaUuid,
       sede_id: sedeUuid,
+      celular: celular || null,
+      correo_electronico: correo_electronico || null,
+      fecha_contratacion: fecha_contratacion || null,
       estado: 'activo'
     };
 
@@ -104,6 +108,7 @@ export const createEmpleado = async (req, res) => {
 
 /**
  * Endpoint para la carga masiva de empleados a través de un archivo CSV/Excel.
+ * Ahora maneja la nueva estructura del Excel.
  */
 export const uploadEmpleados = async (req, res) => {
   try {
@@ -112,7 +117,17 @@ export const uploadEmpleados = async (req, res) => {
       return res.status(400).json({ message: 'No se encontró ningún archivo.' });
     }
     
-    const empleadosToInsert = await parseFile(file);
+    const parsedData = await parseFile(file);
+
+    // Mapeo manual de las columnas del nuevo Excel a los campos de la base de datos
+    const empleadosToProcess = parsedData.map(row => ({
+        celular: row['CELULAR'] || null,
+        nombre_completo: row['NOMBRE'] || null,
+        cedula: String(row['CEDULA']), 
+        sede_id: row['SEDE'] || null,
+        correo_electronico: row['CORREO ELECTRONICO'] || null,
+        fecha_contratacion: row['FECHA CONTRATACION'] || null
+    }));
 
     // Obtener todas las cédulas de los empleados existentes
     const { data: existingEmpleados } = await supabaseAxios.get('/empleados?select=cedula');
@@ -121,26 +136,30 @@ export const uploadEmpleados = async (req, res) => {
     const nuevosEmpleados = [];
     const empleadosActualizados = [];
 
-    const empleadosWithIds = await Promise.all(empleadosToInsert.map(async (emp) => {
-        const empresaUuid = await findOrCreateId('empresas', emp.empresa_id);
-        const sedeUuid = await findOrCreateId('sedes', emp.sede_id);
-        
-        const empleadoData = {
-            cedula: emp.cedula,
-            nombre_completo: emp.nombre_completo,
-            rol: emp.rol,
-            empresa_id: empresaUuid,
-            sede_id: sedeUuid,
-            estado: 'activo'
-        };
+    await Promise.all(empleadosToProcess.map(async (emp) => {
+        // Asumiendo que todos los empleados pertenecen a 'construahorro'
+        const empresaUuid = await findOrCreateId('empresas', 'construahorro');
+        const sedeUuid = await findOrCreateId('sedes', emp.sede_id);
+        
+        const empleadoData = {
+            cedula: emp.cedula,
+            nombre_completo: emp.nombre_completo,
+            rol: null, // El rol ahora es nulo, ya que no se proporciona
+            celular: emp.celular,
+            sede_id: sedeUuid,
+            correo_electronico: emp.correo_electronico,
+            fecha_contratacion: emp.fecha_contratacion,
+            empresa_id: empresaUuid,
+            estado: 'activo'
+        };
 
-        if (existingCedulas.has(emp.cedula)) {
-            empleadosActualizados.push(empleadoData);
-        } else {
-            nuevosEmpleados.push(empleadoData);
-        }
-        return empleadoData;
-    }));
+        if (existingCedulas.has(emp.cedula)) {
+            empleadosActualizados.push(empleadoData);
+        } else {
+            nuevosEmpleados.push(empleadoData);
+        }
+        return empleadoData;
+    }));
 
     let nuevos = 0;
     let actualizados = 0;
