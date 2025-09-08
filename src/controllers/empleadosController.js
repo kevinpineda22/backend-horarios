@@ -33,35 +33,32 @@ const excelDateToJSDate = (dateValue) => {
 const parseFile = async (file) => {
   return new Promise((resolve, reject) => {
     try {
-      // Usamos el parser de CSV si el tipo de archivo lo indica
-      const isCsv = file.originalname.endsWith('.csv');
+      // Leer el archivo como un libro de trabajo de Excel, que también funciona con CSV
       const workbook = xlsx.read(file.buffer, { type: 'buffer' });
-      const sheetName = workbook.SheetNames[0];
+      const sheetName = workbook.SheetNames[0]; // Obtener el nombre de la primera hoja
       const worksheet = workbook.Sheets[sheetName];
 
-      let data;
-      if (isCsv) {
-        // Para CSV, usamos el formato de array de arrays y luego a JSON
-        data = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
-        const headers = data.shift(); // Saca los encabezados
-        data = data.map(row => {
+      // Convertir la hoja a JSON. La librería detecta automáticamente el formato.
+      const data = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
+      const headers = data.shift(); // Saca la primera fila (encabezados)
+
+      // Reconstruye el JSON con los encabezados y datos correctos
+      const result = data.map(row => {
           const obj = {};
           headers.forEach((header, index) => {
-            obj[header] = row[index];
+              if (header) { // Evitar encabezados nulos
+                obj[header.trim()] = row[index];
+              }
           });
           return obj;
-        });
-      } else {
-        // Para Excel, el parser ya lo hace bien
-        data = xlsx.utils.sheet_to_json(worksheet);
-      }
-      resolve(data);
+      });
+
+      resolve(result);
     } catch (e) {
       reject(new Error('Error al parsear el archivo: ' + e.message));
     }
   });
 };
-
 
 /**
  * Función auxiliar para encontrar o crear una empresa/sede y devolver su UUID
