@@ -3,28 +3,30 @@ import { supabaseAxios } from '../services/supabaseAxios.js';
 import { Buffer } from 'buffer';
 import xlsx from 'xlsx';
 
-// --- FUNCIÓN MEJORADA PARA CONVERTIR FECHAS DE EXCEL ---
-const excelDateToJSDate = (serial) => {
+// --- FUNCIÓN MEJORADA PARA CONVERTIR FECHAS ---
+const excelDateToJSDate = (dateValue) => {
     // Si el valor es una cadena de texto, intenta parsear el formato DD/MM/YYYY
-    if (typeof serial === 'string') {
-        const parts = serial.split('/');
-        if (parts.length === 3) {
-            const day = parts[0];
-            const month = parts[1];
+    if (typeof dateValue === 'string') {
+        const cleanedValue = dateValue.trim();
+        const parts = cleanedValue.split('/');
+        // Verifica si tiene 3 partes y los valores son numéricos
+        if (parts.length === 3 && !isNaN(Number(parts[0])) && !isNaN(Number(parts[1])) && !isNaN(Number(parts[2]))) {
+            const day = String(Number(parts[0])).padStart(2, '0');
+            const month = String(Number(parts[1])).padStart(2, '0');
             const year = parts[2];
             // Construye la fecha en formato YYYY-MM-DD
-            return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+            return `${year}-${month}-${day}`;
         }
     }
     
     // Si el valor es un número, usa la lógica anterior para convertirlo
-    if (typeof serial === 'number' && !isNaN(serial)) {
-        const date = new Date(Date.UTC(0, 0, serial - 1));
+    if (typeof dateValue === 'number' && !isNaN(dateValue)) {
+        const date = new Date(Date.UTC(0, 0, dateValue - 1));
         return date.toISOString().split('T')[0];
     }
 
     // Si no es un formato válido, devuelve el valor original o null
-    return serial || null;
+    return dateValue || null;
 };
 
 // Lógica para parsear archivos CSV o XLSX usando la librería 'xlsx'.
@@ -33,7 +35,7 @@ const parseFile = async (file) => {
     try {
       const workbook = xlsx.read(file.buffer, { type: 'buffer' });
       const sheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[sheetName];
+      const worksheet = xlsx.Sheets[sheetName];
       const data = xlsx.utils.sheet_to_json(worksheet);
       resolve(data);
     } catch (e) {
