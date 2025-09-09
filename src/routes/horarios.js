@@ -8,6 +8,13 @@ const router = express.Router();
 router.use(authenticateUser);
 
 /**
+ * PATCH /api/horarios/archivar
+ * Archiva todos los horarios de un empleado.
+ * Esta ruta DEBE estar antes de la ruta que utiliza el ID.
+ */
+router.patch('/archivar', ctrl.archivarHorarios);
+
+/**
  * GET  /api/horarios/:empleado_id
  * Devuelve el historial de horarios de un empleado
  */
@@ -30,11 +37,5 @@ router.patch('/:id', ctrl.updateHorario);
  * Elimina un horario
  */
 router.delete('/:id', ctrl.deleteHorario);
-
-/**
- * PATCH /api/horarios/archivar
- * Archiva todos los horarios de un empleado.
- */
-router.patch('/archivar', ctrl.archivarHorarios);
 
 export default router;
