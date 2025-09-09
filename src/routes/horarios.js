@@ -8,33 +8,33 @@ const router = express.Router();
 router.use(authenticateUser);
 
 /**
- * GET  /api/horarios/:empleado_id
- * Devuelve el historial de horarios de un empleado
- */
+ * GET  /api/horarios/:empleado_id
+ * Devuelve el historial de horarios de un empleado
+ */
 router.get('/:empleado_id', ctrl.getHorariosByEmpleadoId);
 
 /**
- * POST /api/horarios
- * Crea horario(s) semanal(es) automático(s).
- */
+ * POST /api/horarios
+ * Crea horario(s) semanal(es) automático(s).
+ */
 router.post('/', ctrl.createHorario);
 
 /**
- * PATCH /api/horarios/:id
- * Actualiza un horario existente de forma parcial.
- */
+ * PATCH /api/horarios/:id
+ * Actualiza un horario existente de forma parcial.
+ */
 router.patch('/:id', ctrl.updateHorario);
 
 /**
- * DELETE /api/horarios/:id
- * Elimina un horario
- */
+ * DELETE /api/horarios/:id
+ * Elimina un horario
+ */
 router.delete('/:id', ctrl.deleteHorario);
 
 /**
  * PATCH /api/horarios/archivar
  * Archiva todos los horarios de un empleado.
  */
-router.patch('/archivar', ctrl.archivarHorarios); // <-- NUEVA RUTA
+router.patch('/archivar', ctrl.archivarHorarios);
 
 export default router;

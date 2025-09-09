@@ -8,10 +8,8 @@ import {
   WEEKLY_BASE,
 } from "../utils/schedule.js";
 import { getHolidaySet } from "../utils/holidays.js";
-import { format } from 'date-fns';
-
-// La importación de Nodemailer se ha comentado
 // import { sendEmail } from "../services/emailService.js";
+import { format } from 'date-fns';
 
 export const getHorariosByEmpleadoId = async (req, res) => {
   const { empleado_id } = req.params;
@@ -47,13 +45,12 @@ export const createHorario = async (req, res) => {
     const { schedule: horariosSemanales } = generateScheduleForRange56(
       fecha_inicio,
       fecha_fin,
-      workingWeekdays,
+      working_weekdays,
       holidaySet,
       holiday_overrides || {},
       sunday_overrides || {}
     );
 
-    // Archivar los horarios existentes antes de crear los nuevos
     await archivarHorariosPorEmpleado(empleado_id);
 
     const payloadSemanales = horariosSemanales.map((horario) => ({
@@ -65,20 +62,18 @@ export const createHorario = async (req, res) => {
       fecha_inicio: horario.fecha_inicio,
       fecha_fin: horario.fecha_fin,
       total_horas_semana: horario.total_horas_semana,
-      estado_visibilidad: 'publico', // <--- NUEVO CAMPO
+      estado_visibilidad: 'publico',
     }));
     
     const { data: dataSemanales, error: errorSemanales } = await supabaseAxios.post("/horarios", payloadSemanales);
     if (errorSemanales) throw errorSemanales;
 
-    // Se ha comentado la lógica de envío de correos
     /*
-    // Obtener datos del empleado para el correo
+    // La lógica de envío de correos está comentada
     const { data: empleadoData, error: empleadoError } = await supabaseAxios.get(`/empleados?select=nombre_completo,correo_electronico&id=eq.${empleado_id}`);
     if (empleadoError) throw empleadoError;
     const empleado = empleadoData[0];
     
-    // Llamar al servicio de correo para enviar la notificación
     if (empleado && empleado.correo_electronico) {
       const subject = "¡Tu nuevo horario semanal está listo!";
       const htmlContent = `
@@ -160,7 +155,23 @@ export const deleteHorario = async (req, res) => {
   }
 };
 
-// Función interna para archivar horarios (se utiliza en `createHorario`)
+export const archivarHorarios = async (req, res) => {
+  const { empleado_id } = req.body;
+  if (!empleado_id) {
+    return res.status(400).json({ message: "El ID del empleado es requerido." });
+  }
+  try {
+    await supabaseAxios.patch(
+      `/horarios?empleado_id=eq.${empleado_id}`,
+      { estado_visibilidad: 'archivado' }
+    );
+    res.json({ message: "Horarios del empleado archivados con éxito." });
+  } catch (e) {
+    console.error("Error archivando horarios:", e);
+    res.status(500).json({ message: "Error al archivar los horarios." });
+  }
+};
+
 const archivarHorariosPorEmpleado = async (empleadoId) => {
   try {
     await supabaseAxios.patch(
