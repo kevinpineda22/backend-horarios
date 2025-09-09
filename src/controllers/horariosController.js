@@ -8,44 +8,10 @@ import {
   WEEKLY_BASE,
 } from "../utils/schedule.js";
 import { getHolidaySet } from "../utils/holidays.js";
-import { createTransport } from "nodemailer";
 import { format } from 'date-fns';
 
-// Configuración de Nodemailer para enviar correos
-const transporter = createTransport({
-  host: process.env.EMAIL_HOST,
-  port: process.env.EMAIL_PORT,
-  secure: process.env.EMAIL_SECURE === 'true', // true para 465, false para otros puertos
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-});
-
-// Función para enviar un correo electrónico
-const enviarCorreo = async (empleado) => {
-  if (!empleado.correo_electronico) return;
-  
-  const mailOptions = {
-    from: `"${process.env.EMAIL_FROM_NAME}" <${process.env.EMAIL_USER}>`,
-    to: empleado.correo_electronico,
-    subject: "¡Tu nuevo horario semanal está listo!",
-    html: `
-      <p>Hola ${empleado.nombre_completo},</p>
-      <p>Te informamos que tu horario de trabajo semanal ha sido asignado y está listo para ser consultado.</p>
-      <p>Puedes ver los detalles de tu jornada laboral haciendo clic en el siguiente enlace:</p>
-      <p><a href="${process.env.PUBLIC_CONSULTA_URL}">Consultar mi horario</a></p>
-      <p>Gracias por tu dedicación.</p>
-    `,
-  };
-
-  try {
-    await transporter.sendMail(mailOptions);
-    console.log(`Correo enviado a ${empleado.correo_electronico}`);
-  } catch (error) {
-    console.error("Error al enviar el correo:", error);
-  }
-};
+// La importación de Nodemailer se ha comentado
+// import { sendEmail } from "../services/emailService.js";
 
 export const getHorariosByEmpleadoId = async (req, res) => {
   const { empleado_id } = req.params;
@@ -105,13 +71,26 @@ export const createHorario = async (req, res) => {
     const { data: dataSemanales, error: errorSemanales } = await supabaseAxios.post("/horarios", payloadSemanales);
     if (errorSemanales) throw errorSemanales;
 
+    // Se ha comentado la lógica de envío de correos
+    /*
     // Obtener datos del empleado para el correo
     const { data: empleadoData, error: empleadoError } = await supabaseAxios.get(`/empleados?select=nombre_completo,correo_electronico&id=eq.${empleado_id}`);
     if (empleadoError) throw empleadoError;
     const empleado = empleadoData[0];
-    if (empleado) {
-      enviarCorreo(empleado);
+    
+    // Llamar al servicio de correo para enviar la notificación
+    if (empleado && empleado.correo_electronico) {
+      const subject = "¡Tu nuevo horario semanal está listo!";
+      const htmlContent = `
+        <p>Hola ${empleado.nombre_completo},</p>
+        <p>Te informamos que tu horario de trabajo semanal ha sido asignado y está listo para ser consultado.</p>
+        <p>Puedes ver los detalles de tu jornada laboral haciendo clic en el siguiente enlace:</p>
+        <p><a href="${process.env.PUBLIC_CONSULTA_URL}">Consultar mi horario</a></p>
+        <p>Gracias por tu dedicación.</p>
+      `;
+      await sendEmail(empleado.correo_electronico, subject, htmlContent);
     }
+    */
 
     res.status(201).json(dataSemanales);
   } catch (e) {
