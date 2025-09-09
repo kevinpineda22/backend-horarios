@@ -69,7 +69,7 @@ export const createHorario = async (req, res) => {
     if (errorSemanales) throw errorSemanales;
 
     /*
-    // La lógica de envío de correos está comentada
+    // Obtener datos del empleado para el correo
     const { data: empleadoData, error: empleadoError } = await supabaseAxios.get(`/empleados?select=nombre_completo,correo_electronico&id=eq.${empleado_id}`);
     if (empleadoError) throw empleadoError;
     const empleado = empleadoData[0];
