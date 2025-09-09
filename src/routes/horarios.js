@@ -1,4 +1,3 @@
-// src/routes/horarios.js
 import express from 'express';
 import { authenticateUser } from '../middlewares/authMiddleware.js';
 import * as ctrl from '../controllers/horariosController.js';
@@ -31,5 +30,11 @@ router.patch('/:id', ctrl.updateHorario);
  * Elimina un horario
  */
 router.delete('/:id', ctrl.deleteHorario);
+
+/**
+ * PATCH /api/horarios/archivar
+ * Archiva todos los horarios de un empleado.
+ */
+router.patch('/archivar', ctrl.archivarHorarios); // <-- NUEVA RUTA
 
 export default router;

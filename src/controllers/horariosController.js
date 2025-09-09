@@ -8,8 +8,44 @@ import {
   WEEKLY_BASE,
 } from "../utils/schedule.js";
 import { getHolidaySet } from "../utils/holidays.js";
-import { v4 as uuidv4 } from 'uuid';
+import { createTransport } from "nodemailer";
 import { format } from 'date-fns';
+
+// Configuración de Nodemailer para enviar correos
+const transporter = createTransport({
+  host: process.env.EMAIL_HOST,
+  port: process.env.EMAIL_PORT,
+  secure: process.env.EMAIL_SECURE === 'true', // true para 465, false para otros puertos
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
+});
+
+// Función para enviar un correo electrónico
+const enviarCorreo = async (empleado) => {
+  if (!empleado.correo_electronico) return;
+  
+  const mailOptions = {
+    from: `"${process.env.EMAIL_FROM_NAME}" <${process.env.EMAIL_USER}>`,
+    to: empleado.correo_electronico,
+    subject: "¡Tu nuevo horario semanal está listo!",
+    html: `
+      <p>Hola ${empleado.nombre_completo},</p>
+      <p>Te informamos que tu horario de trabajo semanal ha sido asignado y está listo para ser consultado.</p>
+      <p>Puedes ver los detalles de tu jornada laboral haciendo clic en el siguiente enlace:</p>
+      <p><a href="${process.env.PUBLIC_CONSULTA_URL}">Consultar mi horario</a></p>
+      <p>Gracias por tu dedicación.</p>
+    `,
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log(`Correo enviado a ${empleado.correo_electronico}`);
+  } catch (error) {
+    console.error("Error al enviar el correo:", error);
+  }
+};
 
 export const getHorariosByEmpleadoId = async (req, res) => {
   const { empleado_id } = req.params;
@@ -45,11 +81,14 @@ export const createHorario = async (req, res) => {
     const { schedule: horariosSemanales } = generateScheduleForRange56(
       fecha_inicio,
       fecha_fin,
-      working_weekdays,
+      workingWeekdays,
       holidaySet,
       holiday_overrides || {},
       sunday_overrides || {}
     );
+
+    // Archivar los horarios existentes antes de crear los nuevos
+    await archivarHorariosPorEmpleado(empleado_id);
 
     const payloadSemanales = horariosSemanales.map((horario) => ({
       empleado_id,
@@ -59,11 +98,20 @@ export const createHorario = async (req, res) => {
       dias: horario.dias,
       fecha_inicio: horario.fecha_inicio,
       fecha_fin: horario.fecha_fin,
-      total_horas_semana: horario.total_horas_semana
+      total_horas_semana: horario.total_horas_semana,
+      estado_visibilidad: 'publico', // <--- NUEVO CAMPO
     }));
     
     const { data: dataSemanales, error: errorSemanales } = await supabaseAxios.post("/horarios", payloadSemanales);
     if (errorSemanales) throw errorSemanales;
+
+    // Obtener datos del empleado para el correo
+    const { data: empleadoData, error: empleadoError } = await supabaseAxios.get(`/empleados?select=nombre_completo,correo_electronico&id=eq.${empleado_id}`);
+    if (empleadoError) throw empleadoError;
+    const empleado = empleadoData[0];
+    if (empleado) {
+      enviarCorreo(empleado);
+    }
 
     res.status(201).json(dataSemanales);
   } catch (e) {
@@ -130,5 +178,18 @@ export const deleteHorario = async (req, res) => {
   } catch (e) {
     console.error("Error eliminando horario:", e);
     res.status(500).json({ message: "Error deleting horario" });
+  }
+};
+
+// Función interna para archivar horarios (se utiliza en `createHorario`)
+const archivarHorariosPorEmpleado = async (empleadoId) => {
+  try {
+    await supabaseAxios.patch(
+      `/horarios?empleado_id=eq.${empleadoId}`,
+      { estado_visibilidad: 'archivado' }
+    );
+  } catch (e) {
+    console.error(`Error archivando horarios para el empleado ${empleadoId}:`, e);
+    throw e;
   }
 };

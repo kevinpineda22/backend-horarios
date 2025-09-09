@@ -1,8 +1,8 @@
 import { 
-   startOfWeek as dfStartOfWeek, 
-   addWeeks, 
-   addDays as dfAddDays, 
-   format, 
+    startOfWeek as dfStartOfWeek, 
+    addWeeks, 
+    addDays as dfAddDays, 
+    format, 
 } from 'date-fns'; 
 
 // ======================== 
@@ -11,7 +11,7 @@ import {
 const DAILY_LEGAL_LIMIT = 8; 
 const WEEKLY_LEGAL_LIMIT = 44; 
 const WEEKLY_EXTRA_LIMIT = 12; 
-const WEEKLY_TOTAL_LIMIT = 56; 
+const WEEKLY_TOTAL_LIMIT = 56;
 const HOLIDAY_HOURS = 6; 
 
 const BREAKFAST_MINUTES = 15; 
@@ -25,271 +25,288 @@ export const YMD = (d) => new Date(d).toISOString().slice(0, 10);
 export const addDays = (d, n) => dfAddDays(new Date(d), n); 
 export const startOfISOWeek = (d) => dfStartOfWeek(new Date(d), { weekStartsOn: 1 }); 
 export const isoWeekday = (d) => { 
-   const wd = new Date(d).getDay(); 
-   return wd === 0 ? 7 : wd; 
+    const wd = new Date(d).getDay(); 
+    return wd === 0 ? 7 : wd; 
 }; 
 
 const hmToMinutes = (hhmm) => { 
-   const [hh, mm] = hhmm.split(':').map(Number); 
-   return hh * 60 + (mm || 0); 
+    const [hh, mm] = hhmm.split(':').map(Number); 
+    return hh * 60 + (mm || 0); 
 }; 
 const minutesToHM = (m) => { 
-   const hh = Math.floor(m / 60); 
-   const mm = Math.round(m % 60); 
-   return `${pad(hh)}:${pad(mm)}`; 
+    const hh = Math.floor(m / 60); 
+    const mm = Math.round(m % 60); 
+    return `${pad(hh)}:${pad(mm)}`; 
 }; 
 
 // ======================== 
 // Nombres de días 
 // ======================== 
 const WD_NAME = { 
-   1: 'Lunes', 
-   2: 'Martes', 
-   3: 'Miércoles', 
-   4: 'Jueves', 
-   5: 'Viernes', 
-   6: 'Sábado', 
-   7: 'Domingo', 
+    1: 'Lunes', 
+    2: 'Martes', 
+    3: 'Miércoles', 
+    4: 'Jueves', 
+    5: 'Viernes', 
+    6: 'Sábado', 
+    7: 'Domingo', 
 }; 
 
 // ======================== 
 // Info de día 
 // ======================== 
 function getDayInfo(wd, isHoliday, holidayOverride) { 
-   if (isHoliday && holidayOverride === 'work') { 
-     return { 
-       capacity: HOLIDAY_HOURS, 
-       segments: [{ from: hmToMinutes('07:00'), to: hmToMinutes('13:00') }], 
-       breaks: [{ start: hmToMinutes('09:00'), duration: BREAKFAST_MINUTES }], 
-     }; 
-   } 
+    if (isHoliday && holidayOverride === 'work') { 
+      return { 
+        capacity: HOLIDAY_HOURS, 
+        segments: [{ from: hmToMinutes('07:00'), to: hmToMinutes('13:00') }], 
+        breaks: [{ start: hmToMinutes('09:00'), duration: BREAKFAST_MINUTES }], 
+      }; 
+    } 
 
-   if (wd === 7) { 
-     return { 
-       capacity: 0, 
-       segments: [], 
-       breaks: [], 
-     }; 
-   } 
+    if (wd === 7) { 
+      return { 
+        capacity: 0, 
+        segments: [], 
+        breaks: [], 
+      }; 
+    } 
 
-   const weekdayCapacity = wd === 6 ? 8 : 10; 
-   const info = { 
-     capacity: weekdayCapacity, 
-     segments: [ 
-       { from: hmToMinutes('07:00'), to: hmToMinutes('09:00') }, 
-       { from: hmToMinutes('09:15'), to: hmToMinutes('12:00') }, 
-       { from: hmToMinutes('12:45'), to: hmToMinutes(wd === 6 ? '15:00' : '18:00') }, 
-     ], 
-     breaks: [ 
-       { start: hmToMinutes('09:00'), duration: BREAKFAST_MINUTES }, 
-       { start: hmToMinutes('12:00'), duration: LUNCH_MINUTES }, 
-     ], 
-   }; 
-   return info; 
+    // Lunes a Viernes (1-5): 10 horas netas (7-6 con 1h de break)
+    // Sábado (6): 7 horas netas (7-3 con 1h de break)
+    const weekdayCapacity = wd === 6 ? 7 : 10;
+    const saturdayEndTime = '15:00';
+    const weekdayEndTime = '18:00';
+    
+    const info = {
+      capacity: weekdayCapacity,
+      segments: [
+        { from: hmToMinutes('07:00'), to: hmToMinutes('09:00') },
+        { from: hmToMinutes('09:15'), to: hmToMinutes('12:00') },
+        { from: hmToMinutes('12:45'), to: hmToMinutes(wd === 6 ? saturdayEndTime : weekdayEndTime) },
+      ],
+      breaks: [
+        { start: hmToMinutes('09:00'), duration: BREAKFAST_MINUTES },
+        { start: hmToMinutes('12:00'), duration: LUNCH_MINUTES },
+      ],
+    };
+    return info;
 } 
 
 // ======================== 
 // Asignación de horas 
 // ======================== 
 function allocateHoursRandomly(dateISO, dayInfo, hoursNeeded) { 
-   if (hoursNeeded <= 0) { 
-     return { blocks: [], used: 0, entryTime: null, exitTime: null }; 
-   } 
+    if (hoursNeeded <= 0) { 
+      return { blocks: [], used: 0, entryTime: null, exitTime: null }; 
+    } 
 
-   const { segments } = dayInfo; 
+    const { segments } = dayInfo; 
 
-   const segmentsCapacityMins = segments.reduce((s, seg) => s + (seg.to - seg.from), 0); 
-   const requestedWorkMins = Math.round(hoursNeeded * 60); 
-   const workMinutes = Math.min(requestedWorkMins, segmentsCapacityMins); 
+    const segmentsCapacityMins = segments.reduce((s, seg) => s + (seg.to - seg.from), 0); 
+    const requestedWorkMins = Math.round(hoursNeeded * 60); 
+    const workMinutes = Math.min(requestedWorkMins, segmentsCapacityMins); 
 
-   const start = segments[0].from; 
+    const start = segments[0].from; 
 
-   let remaining = workMinutes; 
-   let cursor = start; 
-   const blocks = []; 
+    let remaining = workMinutes; 
+    let cursor = start; 
+    const blocks = []; 
 
-   for (const seg of segments) { 
-     if (cursor < seg.from) cursor = seg.from; 
-     if (cursor >= seg.to) continue; 
+    for (const seg of segments) { 
+      if (cursor < seg.from) cursor = seg.from; 
+      if (cursor >= seg.to) continue; 
 
-     const availInSeg = seg.to - cursor; 
-     if (availInSeg <= 0) continue; 
+      const availInSeg = seg.to - cursor; 
+      if (availInSeg <= 0) continue; 
 
-     const take = Math.min(availInSeg, remaining); 
+      const take = Math.min(availInSeg, remaining); 
 
-     blocks.push({ 
-       start: `${dateISO}T${minutesToHM(cursor)}:00`, 
-       end: `${dateISO}T${minutesToHM(cursor + take)}:00`, 
-       hours: take / 60, 
-     }); 
+      blocks.push({ 
+        start: `${dateISO}T${minutesToHM(cursor)}:00`, 
+        end: `${dateISO}T${minutesToHM(cursor + take)}:00`, 
+        hours: take / 60, 
+      }); 
 
-     cursor += take; 
-     remaining = Math.max(0, remaining - take); 
-     if (remaining <= 0) break; 
-   } 
+      cursor += take; 
+      remaining = Math.max(0, remaining - take); 
+      if (remaining <= 0) break; 
+    } 
 
-   if (blocks.length === 0) { 
-     return { blocks: [], used: 0, entryTime: null, exitTime: null }; 
-   } 
+    if (blocks.length === 0) { 
+      return { blocks: [], used: 0, entryTime: null, exitTime: null }; 
+    } 
 
-   const entryTime = blocks[0].start.slice(11, 16); 
-   const exitTime = blocks[blocks.length - 1].end.slice(11, 16); 
+    const entryTime = blocks[0].start.slice(11, 16); 
+    const exitTime = blocks[blocks.length - 1].end.slice(11, 16); 
 
-   return { 
-     blocks, 
-     used: workMinutes / 60, 
-     entryTime, 
-     exitTime, 
-   }; 
+    return { 
+      blocks, 
+      used: workMinutes / 60, 
+      entryTime, 
+      exitTime, 
+    }; 
 } 
 
 // ======================== 
 // Capacidad "visible" por día 
 // ======================== 
 export function getDailyCapacity(wd, isHoliday, holidayOverride) { 
-   if (isHoliday && holidayOverride === 'work') return HOLIDAY_HOURS; 
-   if (wd === 6) return 8; 
-   if (wd >= 1 && wd <= 5) return 10; 
-   return 0; 
+    if (isHoliday && holidayOverride === 'work') return HOLIDAY_HOURS; 
+    if (wd === 6) return 8; // Sábado de 7 a 3
+    if (wd >= 1 && wd <= 5) return 10; // Lunes a Viernes de 7 a 6
+    return 0; 
 } 
 
 // ======================== 
 // Generación semanal completa 
 // ======================== 
 export function generateScheduleForRange56( 
-   fechaInicio, 
-   fechaFin, 
-   workingWeekdays, 
-   holidaySet, 
-   holidayOverrides = {}, 
-   sundayOverrides = {} 
+    fechaInicio, 
+    fechaFin, 
+    workingWeekdays, 
+    holidaySet, 
+    holidayOverrides = {}, 
+    sundayOverrides = {} 
 ) { 
-   const outWeeks = []; 
-   let cursor = startOfISOWeek(new Date(fechaInicio)); 
-   const rangeStart = new Date(fechaInicio); 
-   const rangeEnd = new Date(fechaFin); 
+    const outWeeks = []; 
+    let cursor = startOfISOWeek(new Date(fechaInicio)); 
+    const rangeStart = new Date(fechaInicio); 
+    const rangeEnd = new Date(fechaFin); 
+    
+    while (cursor <= rangeEnd) { 
+        const weekStart = new Date(cursor); 
+        const weekEnd = addDays(weekStart, 6); 
 
-   while (cursor <= rangeEnd) { 
-     const weekStart = new Date(cursor); 
-     const weekEnd = addDays(weekStart, 6); 
+        const dias = []; 
+        const workableDays = []; 
+        let domingoEstado = null; 
 
-     const dias = []; 
-     const workableDays = []; 
-     let domingoEstado = null; 
+        for (let i = 0; i < 7; i++) { 
+            const d = addDays(weekStart, i); 
+            const ymd = YMD(d); 
+            if (d < rangeStart || d > rangeEnd) continue; 
 
-     for (let i = 0; i < 7; i++) { 
-       const d = addDays(weekStart, i); 
-       const ymd = YMD(d); 
-       if (d < rangeStart || d > rangeEnd) continue; 
+            const wd = isoWeekday(d); 
+            const isSunday = wd === 7; 
+            const isHoliday = holidaySet?.has?.(ymd) || false; 
+            const holidayOverride = holidayOverrides[ymd]; 
 
-       const wd = isoWeekday(d); 
-       const isSunday = wd === 7; 
-       const isHoliday = holidaySet?.has?.(ymd) || false; 
-       const holidayOverride = holidayOverrides[ymd]; 
+            if (isHoliday && holidayOverride === 'skip') continue; 
 
-       if (isHoliday && holidayOverride === 'skip') continue; 
+            if (isSunday) { 
+              if (workingWeekdays.includes(0)) { 
+                const sundayStatus = sundayOverrides[ymd]; 
+                if (sundayStatus) { 
+                  domingoEstado = sundayStatus; 
+                } 
+              } 
+            } else if (workingWeekdays.includes(wd) || (isHoliday && holidayOverride === 'work')) { 
+                const info = getDayInfo(wd, isHoliday, holidayOverride); 
+                const capacity = info.capacity || 0; 
+                
+                if (capacity > 0) { 
+                  workableDays.push({ 
+                    date: d, 
+                    ymd, 
+                    wd, 
+                    isHoliday, 
+                    override: holidayOverride, 
+                    capacity, 
+                    info, 
+                  }); 
+                } 
+            } 
+        } 
 
-       if (isSunday) { 
-         if (workingWeekdays.includes(0)) { 
-           const sundayStatus = sundayOverrides[ymd]; 
-           if (sundayStatus) { 
-             domingoEstado = sundayStatus; 
-           } 
-         } 
-       } else if (workingWeekdays.includes(wd) || (isHoliday && holidayOverride === 'work')) { 
-         const info = getDayInfo(wd, isHoliday, holidayOverride); 
-         const capacity = info.capacity || 0; 
-            
-         if (capacity > 0) { 
-           workableDays.push({ 
-             date: d, 
-             ymd, 
-             wd, 
-             isHoliday, 
-             override: holidayOverride, 
-             capacity, 
-             info, 
-           }); 
-         } 
-       } 
-     } 
+        const dayTotals = new Map(); 
+        for (const x of workableDays) { 
+          dayTotals.set(x.ymd, { base: 0, extra: 0, total: 0 }); 
+        }
 
-     const dayTotals = new Map(); 
-     for (const x of workableDays) { 
-       dayTotals.set(x.ymd, { base: 0, extra: 0, total: 0 }); 
-     } 
+        // --- Lógica de asignación de 56 horas (nueva) ---
+        let legalLeft = WEEKLY_LEGAL_LIMIT;
+        let extraLeft = WEEKLY_EXTRA_LIMIT;
+        
+        // Asignar horas al Sábado primero
+        const saturday = workableDays.find(d => isoWeekday(d.date) === 6);
+        if (saturday) {
+          const totals = dayTotals.get(saturday.ymd);
+          totals.base = Math.min(5, legalLeft); 
+          legalLeft -= totals.base;
+          totals.extra = Math.min(2, extraLeft); 
+          extraLeft -= totals.extra;
+        }
 
-     let legalLeft = WEEKLY_LEGAL_LIMIT; 
-     for (const x of workableDays) { 
-       if (legalLeft <= 0) break; 
-       const maxLegalToday = Math.min(DAILY_LEGAL_LIMIT, x.capacity); 
-       const give = Math.min(maxLegalToday, legalLeft); 
-       if (give > 0) { 
-         dayTotals.get(x.ymd).base = give; 
-         legalLeft -= give; 
-       } 
-     } 
+        // Seleccionar un día aleatorio entre semana para la reducción
+        const weekdays = workableDays.filter(d => isoWeekday(d.date) < 6);
+        let reducedDayYmd = null;
+        if (weekdays.length > 0) {
+          const randomIndex = Math.floor(Math.random() * weekdays.length);
+          reducedDayYmd = weekdays[randomIndex].ymd;
+        }
+        
+        weekdays.forEach(day => {
+          const totals = dayTotals.get(day.ymd);
+          const isReduced = day.ymd === reducedDayYmd;
+          
+          const legalToAssign = Math.min(8, legalLeft);
+          totals.base += legalToAssign;
+          legalLeft -= legalToAssign;
 
-     let extraLeft = WEEKLY_EXTRA_LIMIT; 
-     while (extraLeft > 0) { 
-       let progress = false; 
-       for (const x of workableDays) { 
-         if (extraLeft <= 0) break; 
-         const totals = dayTotals.get(x.ymd); 
-         const current = (totals.base || 0) + (totals.extra || 0); 
-         if (current >= x.capacity) continue; 
+          const extraToAssign = isReduced ? Math.min(1, extraLeft) : Math.min(2, extraLeft);
+          totals.extra += extraToAssign;
+          extraLeft -= extraToAssign;
+        });
+        
+        // Sumar los totales diarios
+        dayTotals.forEach(totals => {
+          totals.total = totals.base + totals.extra;
+        });
+        // --- Fin de la lógica de asignación ---
+        
+        for (const x of workableDays) { 
+          const totals = dayTotals.get(x.ymd) || { base: 0, extra: 0 }; 
+          const total = (totals.base || 0) + (totals.extra || 0); 
 
-         totals.extra += 1; 
-         extraLeft -= 1; 
-         progress = true; 
-         if (extraLeft <= 0) break; 
-       } 
-       if (!progress) break; 
-     } 
+          const { blocks, entryTime, exitTime } = allocateHoursRandomly(x.ymd, x.info, total); 
+          dias.push({ 
+            fecha: x.ymd, 
+            descripcion: WD_NAME[x.wd], 
+            horas: total, 
+            horas_base: totals.base, 
+            horas_extra: totals.extra, 
+            bloques: blocks, 
+            jornada_entrada: entryTime || null, 
+            jornada_salida: exitTime || null, 
+          }); 
+        } 
 
-     for (const x of workableDays) { 
-       const totals = dayTotals.get(x.ymd) || { base: 0, extra: 0 }; 
-       const total = (totals.base || 0) + (totals.extra || 0); 
+        const sundayDate = addDays(weekStart, 6);
+        dias.push({
+          fecha: YMD(sundayDate),
+          descripcion: WD_NAME[isoWeekday(sundayDate)],
+          domingo_estado: domingoEstado,
+          horas: 0,
+          horas_base: 0,
+          horas_extra: 0,
+          bloques: null,
+          jornada_entrada: null,
+          jornada_salida: null,
+        });
+        
+        outWeeks.push({ 
+          fecha_inicio: format(weekStart, 'yyyy-MM-dd'), 
+          fecha_fin: format(weekEnd, 'yyyy-MM-dd'), 
+          dias: dias.sort((a, b) => a.fecha.localeCompare(b.fecha)), 
+          domingo_estado: domingoEstado, 
+          total_horas_semana: dias.reduce((s, d) => s + (Number(d.horas) || 0), 0), 
+        }); 
 
-       const { blocks, entryTime, exitTime } = allocateHoursRandomly(x.ymd, x.info, total); 
-       dias.push({ 
-         fecha: x.ymd, 
-         descripcion: WD_NAME[x.wd], 
-         horas: total, 
-         horas_base: totals.base, 
-         horas_extra: totals.extra, 
-         bloques: blocks, 
-         jornada_entrada: entryTime || null, 
-         jornada_salida: exitTime || null, 
-       }); 
-     } 
+        cursor = addWeeks(weekStart, 1); 
+    } 
 
-     // Solo añadimos el día domingo con 0 horas, para que el frontend pueda mostrar el estado.
-     const sundayDate = addDays(weekStart, 6);
-     dias.push({
-       fecha: YMD(sundayDate),
-       descripcion: WD_NAME[isoWeekday(sundayDate)],
-       domingo_estado: domingoEstado,
-       horas: 0,
-       horas_base: 0,
-       horas_extra: 0,
-       bloques: null,
-       jornada_entrada: null,
-       jornada_salida: null,
-     });
-     
-     outWeeks.push({ 
-       fecha_inicio: format(weekStart, 'yyyy-MM-dd'), 
-       fecha_fin: format(weekEnd, 'yyyy-MM-dd'), 
-       dias: dias.sort((a, b) => a.fecha.localeCompare(b.fecha)), 
-       domingo_estado: domingoEstado, 
-       total_horas_semana: dias.reduce((s, d) => s + (Number(d.horas) || 0), 0), 
-     }); 
-
-     cursor = addWeeks(weekStart, 1); 
-   } 
-
-   return { schedule: outWeeks }; 
+    return { schedule: outWeeks }; 
 } 
 
 // ======================== 

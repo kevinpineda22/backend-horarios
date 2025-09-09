@@ -1,4 +1,3 @@
-// src/routes/public.js
 import express from 'express';
 import axios from 'axios';
 import dotenv from 'dotenv';
@@ -74,8 +73,8 @@ router.post('/consulta-horarios', async (req, res) => {
       return res.status(403).json({ message: 'El empleado se encuentra inactivo.' });
     }
 
-    // 2. Obtener los horarios del empleado
-    const { data: horariosData, error: horariosError } = await client.get(`/horarios?empleado_id=eq.${empleado.id}&order=fecha_inicio.desc`);
+    // 2. Obtener los horarios del empleado, filtrando por 'público'
+    const { data: horariosData, error: horariosError } = await client.get(`/horarios?empleado_id=eq.${empleado.id}&estado_visibilidad=eq.publico&order=fecha_inicio.desc`); // <-- NUEVO FILTRO
     if (horariosError) throw horariosError;
 
     // 3. Devolver el empleado y sus horarios
