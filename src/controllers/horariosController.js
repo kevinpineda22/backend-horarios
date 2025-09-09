@@ -174,10 +174,15 @@ export const archivarHorarios = async (req, res) => {
 
 const archivarHorariosPorEmpleado = async (empleadoId) => {
   try {
-    await supabaseAxios.patch(
-      `/horarios?empleado_id=eq.${empleadoId}`,
-      { estado_visibilidad: 'archivado' }
-    );
+    const { data: horariosPublicos } = await supabaseAxios.get(`/horarios?select=id&empleado_id=eq.${empleadoId}&estado_visibilidad=eq.publico`);
+    if (horariosPublicos && horariosPublicos.length > 0) {
+      await supabaseAxios.patch(
+        `/horarios?empleado_id=eq.${empleadoId}&estado_visibilidad=eq.publico`,
+        { estado_visibilidad: 'archivado' }
+      );
+    } else {
+      console.log(`No se encontraron horarios públicos para el empleado ${empleadoId}. No se archivó nada.`);
+    }
   } catch (e) {
     console.error(`Error archivando horarios para el empleado ${empleadoId}:`, e);
     throw e;
