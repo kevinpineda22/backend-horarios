@@ -1,19 +1,14 @@
-// horariosController.js
-
 import { supabaseAxios } from "../services/supabaseAxios.js";
 import {
   generateScheduleForRange56,
   getDailyCapacity,
   isoWeekday,
-  startOfISOWeek,
-  WEEKLY_BASE, // Importa WEEKLY_BASE
-  WEEKLY_EXTRA, // Importa WEEKLY_EXTRA
+  WEEKLY_LEGAL_LIMIT,
+  WEEKLY_EXTRA_LIMIT,
   getDayInfo,
   allocateHoursRandomly,
-  // Eliminadas WEEKLY_LEGAL_LIMIT y WEEKLY_EXTRA_LIMIT porque no existen
 } from "../utils/schedule.js";
 import { getHolidaySet } from "../utils/holidays.js";
-// import { sendEmail } from "../services/emailService.js";
 import { format } from 'date-fns';
 
 export const getHorariosByEmpleadoId = async (req, res) => {
@@ -72,24 +67,6 @@ export const createHorario = async (req, res) => {
     const { data: dataSemanales, error: errorSemanales } = await supabaseAxios.post("/horarios", payloadSemanales);
     if (errorSemanales) throw errorSemanales;
 
-    /*
-    // Obtener datos del empleado para el correo
-    const { data: empleadoData, error: empleadoError } = await supabaseAxios.get(`/empleados?select=nombre_completo,correo_electronico&id=eq.${empleado_id}`);
-    if (empleadoError) throw empleadoError;
-    const empleado = empleadoData[0];
-    
-    if (empleado && empleado.correo_electronico) {
-      const subject = "¡Tu nuevo horario semanal está listo!";
-      const htmlContent = `
-        <p>Hola ${empleado.nombre_completo},</p>
-        <p>Te informamos que tu horario de trabajo semanal ha sido asignado y está listo para ser consultado.</p>
-        <p><a href="${process.env.PUBLIC_CONSULTA_URL}">Consultar mi horario</a></p>
-        <p>Gracias por tu dedicación.</p>
-      `;
-      await sendEmail(empleado.correo_electronico, subject, htmlContent);
-    }
-    */
-
     res.status(201).json(dataSemanales);
   } catch (e) {
     console.error("Error detallado en createHorario:", e);
@@ -138,11 +115,11 @@ export const updateHorario = async (req, res) => {
       totalSum += totalHours;
     }
 
-    if (legalSum > WEEKLY_BASE + 1e-6) {
-      return res.status(400).json({ message: `Excede ${WEEKLY_BASE}h legales semanales (${legalSum.toFixed(2)}h).` });
+    if (legalSum > WEEKLY_LEGAL_LIMIT + 1e-6) {
+      return res.status(400).json({ message: `Excede ${WEEKLY_LEGAL_LIMIT}h legales semanales (${legalSum.toFixed(2)}h).` });
     }
-    if (extraSum > WEEKLY_EXTRA + 1e-6) {
-      return res.status(400).json({ message: `Excede ${WEEKLY_EXTRA}h extras semanales (${extraSum.toFixed(2)}h).` });
+    if (extraSum > WEEKLY_EXTRA_LIMIT + 1e-6) {
+      return res.status(400).json({ message: `Excede ${WEEKLY_EXTRA_LIMIT}h extras semanales (${extraSum.toFixed(2)}h).` });
     }
     
     const updatePayload = { 
