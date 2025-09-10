@@ -7,7 +7,9 @@ import {
   WEEKLY_BASE,
   WEEKLY_EXTRA,
   getDayInfo,
-  allocateHoursRandomly, // <-- IMPORTADO
+  allocateHoursRandomly,
+  WEEKLY_LEGAL_LIMIT, // Agregado
+  WEEKLY_EXTRA_LIMIT, // Agregado // <-- IMPORTADO
 } from "../utils/schedule.js";
 import { getHolidaySet } from "../utils/holidays.js";
 // import { sendEmail } from "../services/emailService.js";
