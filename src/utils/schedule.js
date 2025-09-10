@@ -94,7 +94,7 @@ function getDayInfo(wd, isHoliday, holidayOverride) {
 // ======================== 
 // Asignación de horas 
 // ======================== 
-function allocateHoursRandomly(dateISO, dayInfo, hoursNeeded) { 
+export function allocateHoursRandomly(dateISO, dayInfo, hoursNeeded) { 
   if (hoursNeeded <= 0) { 
     return { blocks: [], used: 0, entryTime: null, exitTime: null }; 
   } 
