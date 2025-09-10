@@ -9,9 +9,9 @@ import {
 // Constantes de negocio 
 // ======================== 
 const DAILY_LEGAL_LIMIT = 8; 
-export const WEEKLY_LEGAL_LIMIT = 44; 
-export const WEEKLY_EXTRA_LIMIT = 12; 
-export const WEEKLY_TOTAL_LIMIT = 56;
+const WEEKLY_LEGAL_LIMIT = 44; 
+const WEEKLY_EXTRA_LIMIT = 12; 
+ const WEEKLY_TOTAL_LIMIT = 56;
 const HOLIDAY_HOURS = 6; 
 
 const BREAKFAST_MINUTES = 15; 
