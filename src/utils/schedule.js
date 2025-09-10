@@ -9,9 +9,9 @@ import {
 // Constantes de negocio 
 // ======================== 
 const DAILY_LEGAL_LIMIT = 8; 
-const WEEKLY_LEGAL_LIMIT = 44; 
-const WEEKLY_EXTRA_LIMIT = 12; 
- const WEEKLY_TOTAL_LIMIT = 56;
+export const WEEKLY_LEGAL_LIMIT = 44; 
+export const WEEKLY_EXTRA_LIMIT = 12; 
+export const WEEKLY_TOTAL_LIMIT = 56;
 const HOLIDAY_HOURS = 6; 
 
 const BREAKFAST_MINUTES = 15; 
@@ -55,7 +55,7 @@ const WD_NAME = {
 // ======================== 
 // Info de día 
 // ======================== 
-function getDayInfo(wd, isHoliday, holidayOverride) { 
+export function getDayInfo(wd, isHoliday, holidayOverride) { 
   if (isHoliday && holidayOverride === 'work') { 
     return { 
       capacity: HOLIDAY_HOURS, 
@@ -100,6 +100,10 @@ export function allocateHoursRandomly(dateISO, dayInfo, hoursNeeded) {
   } 
 
   const { segments } = dayInfo; 
+  // Agregamos esta validación para evitar el error 'from'
+  if (!segments || segments.length === 0) {
+    return { blocks: [], used: 0, entryTime: null, exitTime: null };
+  }
 
   const segmentsCapacityMins = segments.reduce((s, seg) => s + (seg.to - seg.from), 0); 
   const requestedWorkMins = Math.round(hoursNeeded * 60); 
@@ -326,8 +330,3 @@ export function generateScheduleForRange56(
 
   return { schedule: outWeeks }; 
 } 
-
-// ======================== 
-// Exports 
-// ======================== 
-export { getDayInfo, WEEKLY_LEGAL_LIMIT, WEEKLY_EXTRA_LIMIT };
