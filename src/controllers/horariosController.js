@@ -104,25 +104,49 @@ export const updateHorario = async (req, res) => {
     const { data: [current] } = await supabaseAxios.get(`/horarios?select=*&id=eq.${id}`);
     if (!current) return res.status(404).json({ message: "Horario no encontrado" });
 
-    const newDias = p.dias || current.dias;
+    let newDias = p.dias || current.dias;
     const byWeek = new Map();
-    
+    let legalSum = 0;
+    let extraSum = 0;
+
+    // Validar y ajustar cada día
     for (const d of newDias) {
       const wd = isoWeekday(new Date(d.fecha));
       const cap = getDailyCapacity(wd, false, null);
-      const base = Number(d.horas_base || 0);
-      const extra = Number(d.horas_extra || 0);
-      const total = Number(d.horas || base + extra);
+      let base = Number(d.horas_base || 0);
+      let extra = Number(d.horas_extra || 0);
+      let total = Number(d.horas || base + extra);
 
       if (total > cap + 1e-6) {
         return res.status(400).json({ message: `Capacidad diaria excedida (${cap}h) en ${d.fecha}` });
       }
+
+      // Ajustar sábado: 4 base + 3 extra
+      if (wd === 6) {
+        base = Math.min(4, base);
+        extra = Math.min(3, extra);
+        total = base + extra;
+        d.horas_base = base;
+        d.horas_extra = extra;
+        d.horas = total;
+      }
+
+      legalSum += base;
+      extraSum += extra;
 
       const weekStart = startOfISOWeek(new Date(d.fecha));
       const key = weekStart.toISOString().slice(0, 10);
       if (!byWeek.has(key)) byWeek.set(key, { extrasSum: 0, baseSum: 0 });
       byWeek.get(key).extrasSum += extra;
       byWeek.get(key).baseSum += base;
+    }
+
+    // Validar límites semanales
+    if (legalSum > WEEKLY_BASE + 1e-6) {
+      return res.status(400).json({ message: `Máximo ${WEEKLY_BASE}h legales por semana excedido.` });
+    }
+    if (extraSum > WEEKLY_EXTRA + 1e-6) {
+      return res.status(400).json({ message: `Máximo ${WEEKLY_EXTRA}h extras por semana excedido.` });
     }
 
     for (const [week, agg] of byWeek.entries()) {
