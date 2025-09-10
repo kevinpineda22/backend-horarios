@@ -4,8 +4,9 @@ import {
   getDailyCapacity,
   isoWeekday,
   startOfISOWeek,
-  WEEKLY_EXTRA,
   WEEKLY_BASE,
+  WEEKLY_EXTRA,
+  getDayInfo,
 } from "../utils/schedule.js";
 import { getHolidaySet } from "../utils/holidays.js";
 // import { sendEmail } from "../services/emailService.js";
@@ -104,13 +105,12 @@ export const updateHorario = async (req, res) => {
     const { data: [current] } = await supabaseAxios.get(`/horarios?select=*&id=eq.${id}`);
     if (!current) return res.status(404).json({ message: "Horario no encontrado" });
 
-    let newDias = p.dias || current.dias;
-    const byWeek = new Map();
+    let newDias = JSON.parse(JSON.stringify(p.dias || current.dias)); // Deep copy
     let legalSum = 0;
     let extraSum = 0;
 
-    // Validar y ajustar cada día
-    for (const d of newDias) {
+    for (let i = 0; i < newDias.length; i++) {
+      const d = newDias[i];
       const wd = isoWeekday(new Date(d.fecha));
       const cap = getDailyCapacity(wd, false, null);
       let base = Number(d.horas_base || 0);
@@ -118,52 +118,43 @@ export const updateHorario = async (req, res) => {
       let total = Number(d.horas || base + extra);
 
       if (total > cap + 1e-6) {
-        return res.status(400).json({ message: `Capacidad diaria excedida (${cap}h) en ${d.fecha}` });
+        return res.status(400).json({ message: `Capacidad excedida (${cap}h) en ${d.fecha}` });
       }
 
-      // Ajustar sábado: 4 base + 3 extra
+      // Forzar sábado: 4 base + 3 extra
       if (wd === 6) {
-        base = Math.min(4, base);
-        extra = Math.min(3, extra);
-        total = base + extra;
-        d.horas_base = base;
-        d.horas_extra = extra;
-        d.horas = total;
+        base = 4;
+        extra = 3;
+        total = 7;
+        // Recalcular bloques para sábado
+        const dayInfo = getDayInfo(6, false, null);
+        const { blocks, entryTime, exitTime } = allocateHoursRandomly(d.fecha, dayInfo, total);
+        newDias[i] = { ...d, horas_base: base, horas_extra: extra, horas: total, bloques: blocks, jornada_entrada: entryTime, jornada_salida: exitTime };
+      } else {
+        // Para otros días, ajustar si es editado
+        base = Math.min(total, 8);
+        extra = total - base;
+        // Recalcular bloques para días editados
+        const dayInfo = getDayInfo(wd, false, null);
+        const { blocks, entryTime, exitTime } = allocateHoursRandomly(d.fecha, dayInfo, total);
+        newDias[i] = { ...d, horas_base: base, horas_extra: extra, horas: total, bloques: blocks, jornada_entrada: entryTime, jornada_salida: exitTime };
       }
 
       legalSum += base;
       extraSum += extra;
-
-      const weekStart = startOfISOWeek(new Date(d.fecha));
-      const key = weekStart.toISOString().slice(0, 10);
-      if (!byWeek.has(key)) byWeek.set(key, { extrasSum: 0, baseSum: 0 });
-      byWeek.get(key).extrasSum += extra;
-      byWeek.get(key).baseSum += base;
     }
 
-    // Validar límites semanales
-    if (legalSum > WEEKLY_BASE + 1e-6) {
-      return res.status(400).json({ message: `Máximo ${WEEKLY_BASE}h legales por semana excedido.` });
-    }
-    if (extraSum > WEEKLY_EXTRA + 1e-6) {
-      return res.status(400).json({ message: `Máximo ${WEEKLY_EXTRA}h extras por semana excedido.` });
-    }
-
-    for (const [week, agg] of byWeek.entries()) {
-      if (agg.extrasSum > WEEKLY_EXTRA + 1e-6) {
-        return res.status(400).json({ message: `Máximo ${WEEKLY_EXTRA}h extra por semana (semana ${week}).` });
-      }
-    }
+    if (legalSum > WEEKLY_BASE) return res.status(400).json({ message: `Excede ${WEEKLY_BASE}h legales semanales.` });
+    if (extraSum > WEEKLY_EXTRA) return res.status(400).json({ message: `Excede ${WEEKLY_EXTRA}h extras semanales.` });
 
     const totalSemana = newDias.reduce((s, x) => s + Number(x.horas || 0), 0);
-    const updatePayload = { ...p, dias: newDias, total_horas_semana: totalSemana };
+    const updatePayload = { dias: newDias, total_horas_semana: totalSemana };
     
     await supabaseAxios.patch(`/horarios?id=eq.${id}`, updatePayload);
-    
     res.json({ message: "Updated" });
   } catch (e) {
-    console.error("Error detallado en updateHorario:", e);
-    res.status(500).json({ message: "Error updating horario" });
+    console.error(e);
+    res.status(500).json({ message: "Error updating" });
   }
 };
 
