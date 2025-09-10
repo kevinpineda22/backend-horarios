@@ -9,8 +9,6 @@ import {
   getDayInfo,
 } from "../utils/schedule.js";
 import { getHolidaySet } from "../utils/holidays.js";
-// import { sendEmail } from "../services/emailService.js";
-import { format } from 'date-fns';
 
 export const getHorariosByEmpleadoId = async (req, res) => {
   const { empleado_id } = req.params;
@@ -68,25 +66,6 @@ export const createHorario = async (req, res) => {
     const { data: dataSemanales, error: errorSemanales } = await supabaseAxios.post("/horarios", payloadSemanales);
     if (errorSemanales) throw errorSemanales;
 
-    /*
-    // Obtener datos del empleado para el correo
-    const { data: empleadoData, error: empleadoError } = await supabaseAxios.get(`/empleados?select=nombre_completo,correo_electronico&id=eq.${empleado_id}`);
-    if (empleadoError) throw empleadoError;
-    const empleado = empleadoData[0];
-    
-    if (empleado && empleado.correo_electronico) {
-      const subject = "¡Tu nuevo horario semanal está listo!";
-      const htmlContent = `
-        <p>Hola ${empleado.nombre_completo},</p>
-        <p>Te informamos que tu horario de trabajo semanal ha sido asignado y está listo para ser consultado.</p>
-        <p>Puedes ver los detalles de tu jornada laboral haciendo clic en el siguiente enlace:</p>
-        <p><a href="${process.env.PUBLIC_CONSULTA_URL}">Consultar mi horario</a></p>
-        <p>Gracias por tu dedicación.</p>
-      `;
-      await sendEmail(empleado.correo_electronico, subject, htmlContent);
-    }
-    */
-
     res.status(201).json(dataSemanales);
   } catch (e) {
     console.error("Error detallado en createHorario:", e);
@@ -109,6 +88,11 @@ export const updateHorario = async (req, res) => {
     let legalSum = 0;
     let extraSum = 0;
 
+    // Encontrar el día con 9 horas (jornada_reducida: true)
+    const originalReducedDay = current.dias.find(
+      (day) => day.jornada_reducida && Number(day.horas) === 9
+    );
+
     for (let i = 0; i < newDias.length; i++) {
       const d = newDias[i];
       const wd = isoWeekday(new Date(d.fecha));
@@ -127,6 +111,15 @@ export const updateHorario = async (req, res) => {
         base = 4;
         extra = 3;
         total = 7;
+      } else if (
+        originalReducedDay &&
+        d.fecha === originalReducedDay.fecha &&
+        total === 0
+      ) {
+        // Día original con 9 horas, ahora en 0: asignar 10 horas
+        total = 10;
+        base = 8;
+        extra = 2;
       } else {
         // Otros días: recalcular base y extra
         base = Math.min(total, 8);
