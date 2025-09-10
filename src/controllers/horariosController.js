@@ -1,15 +1,16 @@
+// horariosController.js
+
 import { supabaseAxios } from "../services/supabaseAxios.js";
 import {
   generateScheduleForRange56,
   getDailyCapacity,
   isoWeekday,
   startOfISOWeek,
-  WEEKLY_BASE,
-  WEEKLY_EXTRA,
+  WEEKLY_BASE, // Importa WEEKLY_BASE
+  WEEKLY_EXTRA, // Importa WEEKLY_EXTRA
   getDayInfo,
   allocateHoursRandomly,
-  WEEKLY_LEGAL_LIMIT, // Agregado
-  WEEKLY_EXTRA_LIMIT, // Agregado // <-- IMPORTADO
+  // Eliminadas WEEKLY_LEGAL_LIMIT y WEEKLY_EXTRA_LIMIT porque no existen
 } from "../utils/schedule.js";
 import { getHolidaySet } from "../utils/holidays.js";
 // import { sendEmail } from "../services/emailService.js";
@@ -137,11 +138,11 @@ export const updateHorario = async (req, res) => {
       totalSum += totalHours;
     }
 
-    if (legalSum > WEEKLY_LEGAL_LIMIT + 1e-6) {
-      return res.status(400).json({ message: `Excede ${WEEKLY_LEGAL_LIMIT}h legales semanales (${legalSum.toFixed(2)}h).` });
+    if (legalSum > WEEKLY_BASE + 1e-6) {
+      return res.status(400).json({ message: `Excede ${WEEKLY_BASE}h legales semanales (${legalSum.toFixed(2)}h).` });
     }
-    if (extraSum > WEEKLY_EXTRA_LIMIT + 1e-6) {
-      return res.status(400).json({ message: `Excede ${WEEKLY_EXTRA_LIMIT}h extras semanales (${extraSum.toFixed(2)}h).` });
+    if (extraSum > WEEKLY_EXTRA + 1e-6) {
+      return res.status(400).json({ message: `Excede ${WEEKLY_EXTRA}h extras semanales (${extraSum.toFixed(2)}h).` });
     }
     
     const updatePayload = { 
