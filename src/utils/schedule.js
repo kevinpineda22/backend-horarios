@@ -226,40 +226,58 @@ export function generateScheduleForRange56(
     for (const x of workableDays) { 
       dayTotals.set(x.ymd, { base: 0, extra: 0, total: 0 }); 
     }
-    
-    let legalLeft = WEEKLY_LEGAL_LIMIT;
-    let extraLeft = WEEKLY_EXTRA_LIMIT;
-    
-    // Seleccionar un día aleatorio entre semana para la reducción de 1 hora extra
+
+    let legalLeft = WEEKLY_LEGAL_LIMIT; // 44 horas legales por semana
+    let extraLeft = WEEKLY_EXTRA_LIMIT; // 12 horas extras por semana
+
+    // Asignar horas legales primero
     const weekdays = workableDays.filter(d => isoWeekday(d.date) >= 1 && isoWeekday(d.date) <= 5);
     let reducedDayYmd = null;
     if (weekdays.length > 0) {
       const randomIndex = Math.floor(Math.random() * weekdays.length);
       reducedDayYmd = weekdays[randomIndex].ymd;
     }
-    
-    // Asignar las horas
+
+    // Asignar horas a los días laborables
     for (const day of workableDays) {
       const totals = dayTotals.get(day.ymd);
       const isSaturday = isoWeekday(day.date) === 6;
       const isReduced = day.ymd === reducedDayYmd;
-      
+
       if (isSaturday) {
-        totals.base = 4;
-        totals.extra = 3;
+        // Sábado: 4 horas legales, 3 horas extras
+        const baseHours = Math.min(4, legalLeft);
+        const extraHours = Math.min(3, extraLeft);
+        totals.base = baseHours;
+        totals.extra = extraHours;
+        totals.total = baseHours + extraHours;
+        legalLeft -= baseHours;
+        extraLeft -= extraHours;
       } else if (isReduced) {
-        totals.base = 8;
-        totals.extra = 1;
+        // Día reducido: 8 horas legales, 1 hora extra
+        const baseHours = Math.min(8, legalLeft);
+        const extraHours = Math.min(1, extraLeft);
+        totals.base = baseHours;
+        totals.extra = extraHours;
+        totals.total = baseHours + extraHours;
+        legalLeft -= baseHours;
+        extraLeft -= extraHours;
       } else {
-        totals.base = 8;
-        totals.extra = 2;
+        // Día normal: 8 horas legales, 2 horas extras
+        const baseHours = Math.min(8, legalLeft);
+        const extraHours = Math.min(2, extraLeft);
+        totals.base = baseHours;
+        totals.extra = extraHours;
+        totals.total = baseHours + extraHours;
+        legalLeft -= baseHours;
+        extraLeft -= extraHours;
       }
-      totals.total = totals.base + totals.extra;
     }
 
+    // Generar bloques de horario para cada día laborable
     for (const x of workableDays) { 
       const totals = dayTotals.get(x.ymd) || { base: 0, extra: 0 }; 
-      const total = (totals.base || 0) + (totals.extra || 0); 
+      const total = totals.base + totals.extra; 
 
       const { blocks, entryTime, exitTime } = allocateHoursRandomly(x.ymd, x.info, total); 
       dias.push({ 
@@ -274,6 +292,23 @@ export function generateScheduleForRange56(
         domingo_estado: null, 
       }); 
     } 
+
+    // Añadir el domingo al arreglo de días
+    const sundayDate = addDays(weekStart, 6);
+    const sundayYmd = YMD(sundayDate);
+    if (!dias.some(d => d.fecha === sundayYmd)) {
+      dias.push({
+        fecha: sundayYmd,
+        descripcion: WD_NAME[7],
+        domingo_estado: sundayOverrides[sundayYmd] || null,
+        horas: 0,
+        horas_base: 0,
+        horas_extra: 0,
+        bloques: null,
+        jornada_entrada: null,
+        jornada_salida: null,
+      });
+    }
 
     outWeeks.push({ 
       fecha_inicio: format(weekStart, 'yyyy-MM-dd'), 
