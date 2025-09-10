@@ -9,9 +9,9 @@ import {
 // Constantes de negocio 
 // ======================== 
 const DAILY_LEGAL_LIMIT = 8; 
-const WEEKLY_LEGAL_LIMIT = 44; 
-const WEEKLY_EXTRA_LIMIT = 12; 
-const WEEKLY_TOTAL_LIMIT = 56;
+export const WEEKLY_LEGAL_LIMIT = 44; 
+export const WEEKLY_EXTRA_LIMIT = 12; 
+export const WEEKLY_TOTAL_LIMIT = 56;
 const HOLIDAY_HOURS = 6; 
 
 const BREAKFAST_MINUTES = 15; 
@@ -308,11 +308,11 @@ export function generateScheduleForRange56(
         horas: 0,
         horas_base: 0,
         horas_extra: 0,
-        bloques: null,
-        jornada_entrada: null,
-        jornada_salida: null,
-      });
-    }
+        bloques: null, 
+        jornada_entrada: null, 
+        jornada_salida: null, 
+      }); 
+    } 
 
     outWeeks.push({ 
       fecha_inicio: format(weekStart, 'yyyy-MM-dd'), 
@@ -330,8 +330,4 @@ export function generateScheduleForRange56(
 // ======================== 
 // Exports 
 // ======================== 
-export const WEEKLY_BASE = WEEKLY_LEGAL_LIMIT; 
-export const WEEKLY_EXTRA = WEEKLY_EXTRA_LIMIT; 
-export const WEEKLY_TOTAL = WEEKLY_TOTAL_LIMIT; 
-
-export { getDayInfo };
+export { getDayInfo, WEEKLY_LEGAL_LIMIT, WEEKLY_EXTRA_LIMIT };
