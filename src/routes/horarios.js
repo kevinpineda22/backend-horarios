@@ -15,6 +15,18 @@ router.use(authenticateUser);
 router.patch('/archivar', ctrl.archivarHorarios);
 
 /**
+ * GET /api/horarios/available-slots/:empleado_id/:fecha
+ * Obtiene los slots de tiempo disponibles para un empleado en una fecha específica
+ */
+router.get('/available-slots/:empleado_id/:fecha', ctrl.getAvailableTimeSlots);
+
+/**
+ * POST /api/horarios/validate-schedule
+ * Valida un horario propuesto contra conflictos existentes
+ */
+router.post('/validate-schedule', ctrl.validateScheduleConflicts);
+
+/**
  * GET  /api/horarios/:empleado_id
  * Devuelve el historial de horarios de un empleado
  */

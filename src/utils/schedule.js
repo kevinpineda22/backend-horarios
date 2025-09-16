@@ -39,6 +39,33 @@ const minutesToHM = (m) => {
   return `${pad(hh)}:${pad(mm)}`; 
 }; 
 
+// ========================
+// 30-minute interval utilities
+// ========================
+export const roundToNearestHalfHour = (minutes) => {
+  return Math.round(minutes / 30) * 30;
+};
+
+export const generateHalfHourSlots = (startMinutes, endMinutes, durationMinutes) => {
+  const slots = [];
+  let currentStart = roundToNearestHalfHour(startMinutes);
+  
+  while (currentStart + durationMinutes <= endMinutes) {
+    slots.push({
+      start: currentStart,
+      end: currentStart + durationMinutes,
+      duration: durationMinutes
+    });
+    currentStart += 30; // Move to next 30-minute slot
+  }
+  
+  return slots;
+};
+
+export const isHalfHourAligned = (minutes) => {
+  return minutes % 30 === 0;
+};
+
 // ======================== 
 // Nombres de días 
 // ======================== 
@@ -148,7 +175,168 @@ export function allocateHoursRandomly(dateISO, dayInfo, hoursNeeded) {
     entryTime, 
     exitTime, 
   }; 
-} 
+}
+
+// ======================== 
+// Enhanced Asignación de horas with 30-minute intervals
+// ======================== 
+export function allocateHoursInHalfHourSlots(dateISO, dayInfo, hoursNeeded) { 
+  if (hoursNeeded <= 0) { 
+    return { blocks: [], used: 0, entryTime: null, exitTime: null }; 
+  } 
+
+  const { segments } = dayInfo; 
+  if (!segments || segments.length === 0) {
+    return { blocks: [], used: 0, entryTime: null, exitTime: null };
+  }
+
+  const segmentsCapacityMins = segments.reduce((s, seg) => s + (seg.to - seg.from), 0); 
+  const requestedWorkMins = Math.round(hoursNeeded * 60); 
+  const workMinutes = Math.min(requestedWorkMins, segmentsCapacityMins); 
+
+  // Generate all available 30-minute slots across segments
+  const availableSlots = [];
+  segments.forEach(seg => {
+    const segmentSlots = generateHalfHourSlots(seg.from, seg.to, 30);
+    availableSlots.push(...segmentSlots);
+  });
+
+  if (availableSlots.length === 0) {
+    return { blocks: [], used: 0, entryTime: null, exitTime: null };
+  }
+
+  // Calculate how many 30-minute slots we need
+  const slotsNeeded = Math.ceil(workMinutes / 30);
+  const actualSlotsToUse = Math.min(slotsNeeded, availableSlots.length);
+
+  // Select consecutive slots when possible, or spread them efficiently
+  const selectedSlots = selectOptimalSlots(availableSlots, actualSlotsToUse);
+  
+  // Convert slots to blocks
+  const blocks = selectedSlots.map(slot => ({
+    start: `${dateISO}T${minutesToHM(slot.start)}:00`, 
+    end: `${dateISO}T${minutesToHM(slot.end)}:00`, 
+    hours: slot.duration / 60, 
+  }));
+
+  if (blocks.length === 0) { 
+    return { blocks: [], used: 0, entryTime: null, exitTime: null }; 
+  } 
+
+  const entryTime = blocks[0].start.slice(11, 16); 
+  const exitTime = blocks[blocks.length - 1].end.slice(11, 16); 
+  const actualMinutesUsed = selectedSlots.reduce((sum, slot) => sum + slot.duration, 0);
+
+  return { 
+    blocks, 
+    used: actualMinutesUsed / 60, 
+    entryTime, 
+    exitTime, 
+  }; 
+}
+
+// Helper function to select optimal time slots
+function selectOptimalSlots(availableSlots, slotsNeeded) {
+  if (slotsNeeded >= availableSlots.length) {
+    return availableSlots;
+  }
+
+  // Try to find consecutive slots first
+  for (let i = 0; i <= availableSlots.length - slotsNeeded; i++) {
+    const consecutiveSlots = availableSlots.slice(i, i + slotsNeeded);
+    const isConsecutive = consecutiveSlots.every((slot, index) => {
+      if (index === 0) return true;
+      return slot.start === consecutiveSlots[index - 1].end;
+    });
+    
+    if (isConsecutive) {
+      return consecutiveSlots;
+    }
+  }
+
+  // If no consecutive slots found, select from the beginning
+  return availableSlots.slice(0, slotsNeeded);
+}
+
+// ======================== 
+// Schedule Conflict Detection and Validation
+// ======================== 
+export function validateTimeSlotConflicts(existingSchedules, newSchedule) {
+  if (!existingSchedules || existingSchedules.length === 0) {
+    return { hasConflict: false, conflicts: [] };
+  }
+
+  const conflicts = [];
+  const newStart = new Date(newSchedule.start);
+  const newEnd = new Date(newSchedule.end);
+
+  for (const existing of existingSchedules) {
+    const existingStart = new Date(existing.start);
+    const existingEnd = new Date(existing.end);
+
+    // Check for time overlap
+    if (newStart < existingEnd && newEnd > existingStart) {
+      conflicts.push({
+        conflictingSchedule: existing,
+        overlapStart: new Date(Math.max(newStart.getTime(), existingStart.getTime())),
+        overlapEnd: new Date(Math.min(newEnd.getTime(), existingEnd.getTime()))
+      });
+    }
+  }
+
+  return {
+    hasConflict: conflicts.length > 0,
+    conflicts
+  };
+}
+
+export function generateAvailableTimeSlots(dayInfo, existingSchedules = [], date) {
+  if (!dayInfo || !dayInfo.segments) {
+    return [];
+  }
+
+  const availableSlots = [];
+  
+  // Generate all possible 30-minute slots for the day
+  dayInfo.segments.forEach(segment => {
+    const segmentSlots = generateHalfHourSlots(segment.from, segment.to, 30);
+    
+    // Filter out slots that conflict with existing schedules
+    const nonConflictingSlots = segmentSlots.filter(slot => {
+      const slotStart = `${date}T${minutesToHM(slot.start)}:00`;
+      const slotEnd = `${date}T${minutesToHM(slot.end)}:00`;
+      
+      const testSchedule = { start: slotStart, end: slotEnd };
+      const validation = validateTimeSlotConflicts(existingSchedules, testSchedule);
+      
+      return !validation.hasConflict;
+    });
+    
+    availableSlots.push(...nonConflictingSlots);
+  });
+
+  return availableSlots;
+}
+
+export function isValidTimeSlot(timeSlot) {
+  if (!timeSlot || !timeSlot.start || !timeSlot.end) {
+    return false;
+  }
+
+  const start = new Date(timeSlot.start);
+  const end = new Date(timeSlot.end);
+  
+  // Check if end is after start
+  if (end <= start) {
+    return false;
+  }
+  
+  // Check if times are aligned to 30-minute intervals
+  const startMinutes = start.getHours() * 60 + start.getMinutes();
+  const endMinutes = end.getHours() * 60 + end.getMinutes();
+  
+  return isHalfHourAligned(startMinutes) && isHalfHourAligned(endMinutes);
+}
 
 // ======================== 
 // Capacidad "visible" por día 
