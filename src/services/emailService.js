@@ -4,7 +4,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 // Configuración corregida para Outlook/Office 365
-const transporter = nodemailer.createTransporter({
+const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
   port: process.env.SMTP_PORT,
   secure: process.env.SMTP_SECURE === "true", // false para STARTTLS en puerto 587
