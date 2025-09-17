@@ -74,9 +74,9 @@ export const createHorario = async (req, res) => {
       data: [empleado],
       error: empleadoError,
     } = await supabaseAxios.get(
-      `/empleados?select=nombre_completo,email&id=eq.${empleado_id}`
+      `/empleados?select=nombre_completo,correo_electronico&id=eq.${empleado_id}`
     );
-    if (empleadoError || !empleado || !empleado.email) {
+    if (empleadoError || !empleado || !empleado.correo_electronico) {
       console.error(
         "No se pudo obtener el email del empleado. El correo no se enviará."
       );
@@ -92,7 +92,7 @@ export const createHorario = async (req, res) => {
                 <p>Gracias,</p>
                 <p>El equipo de Gestión de Horarios</p>
             `;
-      await sendEmail(empleado.email, subject, htmlContent);
+      await sendEmail(empleado.correo_electronico, subject, htmlContent);
     }
 
     res.status(201).json(dataSemanales);
