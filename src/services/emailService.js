@@ -1,6 +1,5 @@
 import nodemailer from 'nodemailer';
 
-/*
 const transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
     port: parseInt(process.env.SMTP_PORT, 10),
@@ -14,15 +13,14 @@ const transporter = nodemailer.createTransport({
 export const sendEmail = async (to, subject, htmlContent) => {
     try {
         await transporter.sendMail({
-            from: `"Gestor de Horarios" <${process.env.SMTP_FROM}>`,
+            from: process.env.SMTP_FROM,
             to,
             subject,
             html: htmlContent,
         });
-        console.log(`📨 Correo enviado a ${to}`);
+        console.log(`📨 Correo de notificación enviado a ${to}`);
     } catch (error) {
         console.error('❌ Error al enviar el correo:', error);
-        throw error;
+        // La operación de creación de horario no se interrumpe si el correo falla
     }
 };
-*/
