@@ -70,32 +70,62 @@ export const createHorario = async (req, res) => {
       await supabaseAxios.post("/horarios", payloadSemanales);
     if (errorSemanales) throw errorSemanales;
 
-    const {
-      data: [empleado],
-      error: empleadoError,
-    } = await supabaseAxios.get(
-      `/empleados?select=nombre_completo,correo_electronico&id=eq.${empleado_id}`
-    );
-    if (empleadoError || !empleado || !empleado.correo_electronico) {
-      console.error(
-        "No se pudo obtener el email del empleado. El correo no se enviará."
+    // Intentar enviar el correo electrónico
+    let emailStatus = {
+      sent: false,
+      error: null,
+      empleado: null,
+    };
+
+    try {
+      const {
+        data: [empleado],
+        error: empleadoError,
+      } = await supabaseAxios.get(
+        `/empleados?select=nombre_completo,correo_electronico&id=eq.${empleado_id}`
       );
-    } else {
-      const subject = `🗓️ Horario asignado: ${fecha_inicio} al ${fecha_fin}`;
-      const publicUrl = process.env.PUBLIC_CONSULTA_URL;
-      const htmlContent = `
-                <p>Hola <b>${empleado.nombre_completo}</b>,</p>
-                <p>Tu nuevo horario ha sido asignado para el periodo del <b>${fecha_inicio}</b> al <b>${fecha_fin}</b>.</p>
-                <p>Puedes revisarlo en la aplicación haciendo clic en el siguiente enlace:</p>
-                <p><a href="${publicUrl}" style="background-color: #4f46e5; color: #ffffff; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: bold;">Ver mi Horario</a></p>
-                <br/>
-                <p>Gracias,</p>
-                <p>El equipo de Gestión de Horarios</p>
-            `;
-      await sendEmail(empleado.correo_electronico, subject, htmlContent);
+
+      if (empleadoError || !empleado) {
+        emailStatus.error = "No se pudo obtener los datos del empleado";
+        console.error("Error obteniendo empleado:", empleadoError);
+      } else if (!empleado.correo_electronico) {
+        emailStatus.error =
+          "El empleado no tiene correo electrónico registrado";
+        emailStatus.empleado = empleado.nombre_completo;
+        console.error(
+          "El empleado no tiene email registrado:",
+          empleado.nombre_completo
+        );
+      } else {
+        const subject = `🗓️ Horario asignado: ${fecha_inicio} al ${fecha_fin}`;
+        const publicUrl = process.env.PUBLIC_CONSULTA_URL;
+        const htmlContent = `
+                  <p>Hola <b>${empleado.nombre_completo}</b>,</p>
+                  <p>Tu nuevo horario ha sido asignado para el periodo del <b>${fecha_inicio}</b> al <b>${fecha_fin}</b>.</p>
+                  <p>Puedes revisarlo en la aplicación haciendo clic en el siguiente enlace:</p>
+                  <p><a href="${publicUrl}" style="background-color: #4f46e5; color: #ffffff; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: bold;">Ver mi Horario</a></p>
+                  <br/>
+                  <p>Gracias,</p>
+                  <p>El equipo de Gestión de Horarios</p>
+              `;
+
+        await sendEmail(empleado.correo_electronico, subject, htmlContent);
+        emailStatus.sent = true;
+        emailStatus.empleado = empleado.nombre_completo;
+        console.log(
+          `Correo enviado exitosamente a: ${empleado.correo_electronico}`
+        );
+      }
+    } catch (emailError) {
+      emailStatus.error = `Error al enviar correo: ${emailError.message}`;
+      console.error("Error enviando email:", emailError);
     }
 
-    res.status(201).json(dataSemanales);
+    // Respuesta incluyendo el estado del email
+    res.status(201).json({
+      ...dataSemanales,
+      email_notification: emailStatus,
+    });
   } catch (e) {
     console.error("Error detallado en createHorario:", e);
     res.status(500).json({
