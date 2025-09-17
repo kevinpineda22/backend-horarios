@@ -1,26 +1,33 @@
-import nodemailer from 'nodemailer';
+import nodemailer from "nodemailer";
+import dotenv from "dotenv";
 
-const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: parseInt(process.env.SMTP_PORT, 10),
-    secure: false, 
-    auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASSWORD,
-    },
+dotenv.config();
+
+// Configuración corregida para Outlook/Office 365
+const transporter = nodemailer.createTransporter({
+  host: process.env.SMTP_HOST,
+  port: process.env.SMTP_PORT,
+  secure: process.env.SMTP_SECURE === "true", // false para STARTTLS en puerto 587
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
 });
 
 export const sendEmail = async (to, subject, htmlContent) => {
-    try {
-        await transporter.sendMail({
-            from: process.env.SMTP_FROM,
-            to,
-            subject,
-            html: htmlContent,
-        });
-        console.log(`📨 Correo de notificación enviado a ${to}`);
-    } catch (error) {
-        console.error('❌ Error al enviar el correo:', error);
-        // La operación de creación de horario no se interrumpe si el correo falla
-    }
+  try {
+    const info = await transporter.sendMail({
+      from: `"Sistema de Horarios" <${process.env.EMAIL_USER}>`,
+      to,
+      subject,
+      html: htmlContent,
+    });
+
+    console.log(`📨 Correo enviado a ${to}:`, info.messageId);
+    return info; // Devolver información del envío exitoso
+  } catch (error) {
+    console.error("❌ Error al enviar el correo:", error);
+    // Relanzar el error para que pueda ser manejado por el llamador
+    throw error;
+  }
 };
