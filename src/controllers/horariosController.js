@@ -98,15 +98,62 @@ export const createHorario = async (req, res) => {
         );
       } else {
         const subject = `🗓️ Horario asignado: ${fecha_inicio} al ${fecha_fin}`;
-        const publicUrl = process.env.PUBLIC_CONSULTA_URL;
+        const publicUrl = "https://merkahorro.com/consulta-horarios";
         const htmlContent = `
-                  <p>Hola <b>${empleado.nombre_completo}</b>,</p>
-                  <p>Tu nuevo horario ha sido asignado para el periodo del <b>${fecha_inicio}</b> al <b>${fecha_fin}</b>.</p>
-                  <p>Puedes revisarlo en la aplicación haciendo clic en el siguiente enlace:</p>
-                  <p><a href="${publicUrl}" style="background-color: #4f46e5; color: #ffffff; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: bold;">Ver mi Horario</a></p>
-                  <br/>
-                  <p>Gracias,</p>
-                  <p>El equipo de Gestión de Horarios</p>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Horario Asignado</title>
+</head>
+<body style="font-family: Arial, sans-serif; background-color: #f5f5f5; margin: 0; padding: 20px;">
+    <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e0e0e0;">
+        <div style="background-color: #210d65; color: #ffffff; text-align: center; padding: 25px;">
+            <h1 style="margin: 0; font-size: 24px;">📅 Horario Asignado</h1>
+            <p style="margin: 10px 0 0 0; font-size: 16px;">Sistema de Gestión de Horarios</p>
+        </div>
+        
+        <div style="padding: 30px;">
+            <p style="font-size: 18px; color: #210d65; margin: 0 0 20px 0;">
+                Hola <strong>${empleado.nombre_completo}</strong>,
+            </p>
+            
+            <p style="color: #333333; font-size: 16px; margin: 0 0 20px 0; line-height: 1.5;">
+                Te informamos que tu nuevo horario laboral ha sido generado y asignado exitosamente.
+            </p>
+            
+            <div style="background-color: #f8f9ff; border-left: 3px solid #210d65; padding: 15px; margin: 20px 0;">
+                <p style="margin: 0 0 10px 0; color: #333333; font-size: 16px;">
+                    <strong>Período asignado:</strong>
+                </p>
+                <p style="font-size: 18px; color: #210d65; text-align: center; margin: 0; font-weight: bold;">
+                    ${fecha_inicio} al ${fecha_fin}
+                </p>
+            </div>
+            
+            <hr style="border: none; height: 1px; background-color: #e0e0e0; margin: 25px 0;">
+            
+            <p style="color: #333333; font-size: 16px; text-align: center; margin: 0 0 25px 0; line-height: 1.5;">
+                Puedes consultar los detalles completos de tu horario haciendo clic en el siguiente enlace:
+            </p>
+            
+            <div style="text-align: center;">
+                <a href="${publicUrl}" style="background-color: #210d65; color: #ffffff; text-decoration: none; padding: 12px 30px; font-size: 16px; font-weight: bold;">
+                    Ver Mi Horario
+                </a>
+            </div>
+        </div>
+        
+        <div style="background-color: #f8f9fa; padding: 20px; text-align: center; border-top: 1px solid #e0e0e0;">
+            <p style="margin: 0; color: #666666; font-size: 14px;">Este es un mensaje automatizado del sistema de horarios.</p>
+            <p style="margin: 5px 0 0 0; font-size: 12px; color: #666666;">
+                Si tienes alguna consulta, contacta a tu supervisor directo.
+            </p>
+        </div>
+    </div>
+</body>
+</html>
               `;
 
         await sendEmail(empleado.correo_electronico, subject, htmlContent);
