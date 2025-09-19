@@ -7,6 +7,10 @@ import {
   WEEKLY_EXTRA_LIMIT,
   getDayInfo,
   allocateHoursRandomly,
+  allocateHoursInHalfHourSlots,
+  validateTimeSlotConflicts,
+  generateAvailableTimeSlots,
+  isValidTimeSlot,
 } from "../utils/schedule.js";
 import { getHolidaySet } from "../utils/holidays.js";
 import { format } from "date-fns";
@@ -233,11 +237,14 @@ export const updateHorario = async (req, res) => {
 
       if (totalHours > 0 && wd !== 7) {
         const dayInfo = getDayInfo(wd, false, null);
-        const { blocks, entryTime, exitTime } = allocateHoursRandomly(
-          d.fecha,
-          dayInfo,
-          totalHours
-        );
+        
+        // Use enhanced 30-minute interval allocation for better precision
+        const useHalfHourSlots = totalHours <= 8; // Use 30-min slots for shorter shifts
+        
+        const { blocks, entryTime, exitTime } = useHalfHourSlots
+          ? allocateHoursInHalfHourSlots(d.fecha, dayInfo, totalHours)
+          : allocateHoursRandomly(d.fecha, dayInfo, totalHours);
+          
         d.bloques = blocks;
         d.jornada_entrada = entryTime;
         d.jornada_salida = exitTime;
@@ -306,6 +313,113 @@ export const archivarHorarios = async (req, res) => {
   } catch (e) {
     console.error("Error archivando horarios:", e);
     res.status(500).json({ message: "Error al archivar los horarios." });
+  }
+};
+
+// ========================
+// New Enhanced Schedule API Endpoints
+// ========================
+
+export const getAvailableTimeSlots = async (req, res) => {
+  const { empleado_id, fecha } = req.params;
+  
+  try {
+    // Get existing schedules for the employee on this date
+    const { data: existingSchedules } = await supabaseAxios.get(
+      `/horarios?select=*&empleado_id=eq.${empleado_id}&dias->>fecha=eq.${fecha}&estado_visibilidad=eq.publico`
+    );
+
+    // Extract existing time blocks
+    const existingTimeBlocks = [];
+    if (existingSchedules && existingSchedules.length > 0) {
+      existingSchedules.forEach(schedule => {
+        if (schedule.dias && Array.isArray(schedule.dias)) {
+          schedule.dias.forEach(dia => {
+            if (dia.fecha === fecha && dia.bloques) {
+              existingTimeBlocks.push(...dia.bloques);
+            }
+          });
+        }
+      });
+    }
+
+    // Get day info based on weekday
+    const dateObj = new Date(fecha);
+    const wd = isoWeekday(dateObj);
+    const dayInfo = getDayInfo(wd, false, null);
+
+    // Generate available time slots
+    const availableSlots = generateAvailableTimeSlots(dayInfo, existingTimeBlocks, fecha);
+
+    res.json({
+      fecha,
+      empleado_id,
+      availableSlots: availableSlots.map(slot => ({
+        start: `${fecha}T${slot.start}:00`,
+        end: `${fecha}T${slot.end}:00`,
+        duration: slot.duration,
+        startTime: slot.start,
+        endTime: slot.end
+      })),
+      dayCapacity: getDailyCapacity(wd, false, null),
+      existingSchedules: existingTimeBlocks
+    });
+  } catch (e) {
+    console.error("Error getting available time slots:", e);
+    res.status(500).json({ message: "Error retrieving available time slots" });
+  }
+};
+
+export const validateScheduleConflicts = async (req, res) => {
+  const { empleado_id, proposed_schedule } = req.body;
+  
+  if (!empleado_id || !proposed_schedule) {
+    return res.status(400).json({ 
+      message: "empleado_id and proposed_schedule are required" 
+    });
+  }
+
+  if (!isValidTimeSlot(proposed_schedule)) {
+    return res.status(400).json({
+      message: "Invalid time slot. Times must be aligned to 30-minute intervals."
+    });
+  }
+
+  try {
+    const scheduleDate = new Date(proposed_schedule.start).toISOString().slice(0, 10);
+    
+    // Get existing schedules for the employee on this date
+    const { data: existingSchedules } = await supabaseAxios.get(
+      `/horarios?select=*&empleado_id=eq.${empleado_id}&dias->>fecha=eq.${scheduleDate}&estado_visibilidad=eq.publico`
+    );
+
+    // Extract existing time blocks
+    const existingTimeBlocks = [];
+    if (existingSchedules && existingSchedules.length > 0) {
+      existingSchedules.forEach(schedule => {
+        if (schedule.dias && Array.isArray(schedule.dias)) {
+          schedule.dias.forEach(dia => {
+            if (dia.fecha === scheduleDate && dia.bloques) {
+              existingTimeBlocks.push(...dia.bloques);
+            }
+          });
+        }
+      });
+    }
+
+    // Validate conflicts
+    const validation = validateTimeSlotConflicts(existingTimeBlocks, proposed_schedule);
+
+    res.json({
+      isValid: !validation.hasConflict,
+      hasConflicts: validation.hasConflict,
+      conflicts: validation.conflicts,
+      proposed_schedule,
+      existing_schedules: existingTimeBlocks
+    });
+  } catch (e) {
+    console.error("Error validating schedule conflicts:", e);
+    res.status(500).json({ message: "Error validating schedule conflicts" });
   }
 };
 
