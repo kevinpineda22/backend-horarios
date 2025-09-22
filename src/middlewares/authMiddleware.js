@@ -1,44 +1,55 @@
-import { createClient } from "@supabase/supabase-js";
-import dotenv from "dotenv";
-import jwt from "jsonwebtoken";
-
+import jwt from 'jsonwebtoken';
+import dotenv from 'dotenv';
 dotenv.config();
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_KEY
-);
-
-export const authenticateUser = (req, res, next) => {
-  const authHeader = req.headers.authorization;
-
-  console.log("Auth middleware - Headers:", {
-    authorization: authHeader ? "Present" : "Missing",
-    userAgent: req.headers["user-agent"],
-    origin: req.headers.origin,
-  });
-
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    console.log("Auth middleware - No valid Bearer token found");
-    return res.status(401).json({ message: "Token de acceso requerido" });
-  }
-
-  const token = authHeader.substring(7); // Remove "Bearer "
-
+export const authenticateUser = async (req, res, next) => {
   try {
+    const authHeader = req.headers.authorization;
+    
+    console.log('Auth middleware - Headers:', {
+      authorization: authHeader ? 'Present' : 'Missing',
+      userAgent: req.headers['user-agent']?.slice(0, 50),
+      origin: req.headers.origin
+    });
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      console.log('Auth middleware - No valid Bearer token found');
+      return res.status(401).json({ message: 'Token de acceso requerido' });
+    }
+
+    const token = authHeader.substring(7); // Remove "Bearer "
+    
+    if (!token) {
+      console.log('Auth middleware - Empty token after Bearer');
+      return res.status(401).json({ message: 'Token vacío' });
+    }
+
+    // Verificar JWT usando el secreto de Supabase
     const decoded = jwt.verify(token, process.env.SUPABASE_JWT_SECRET);
-    console.log(
-      "Auth middleware - Token decoded successfully for user:",
-      decoded.sub
-    );
-    req.user = { id: decoded.sub, ...decoded };
+    
+    console.log('Auth middleware - Token decoded successfully for user:', decoded.sub);
+    
+    // Agregar información del usuario al request
+    req.user = { 
+      id: decoded.sub,
+      email: decoded.email,
+      ...decoded 
+    };
+    
     next();
   } catch (error) {
-    console.error("Auth middleware - Token verification failed:", {
+    console.error('Auth middleware - Token verification failed:', {
       error: error.message,
-      tokenPresent: !!token,
-      tokenLength: token?.length,
+      name: error.name,
+      tokenPresent: !!req.headers.authorization
     });
-    return res.status(401).json({ message: "Token inválido o expirado" });
+    
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({ message: 'Token expirado' });
+    } else if (error.name === 'JsonWebTokenError') {
+      return res.status(401).json({ message: 'Token inválido' });
+    } else {
+      return res.status(401).json({ message: 'Error de autenticación' });
+    }
   }
 };

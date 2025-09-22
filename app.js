@@ -13,14 +13,11 @@ const PORT = process.env.PORT;
 
 app.use(
   cors({
-    origin: [
-      "http://localhost:3000",
-      "http://localhost:5173",
-      "https://merkahorro.com", // Agregar tu dominio de frontend
-    ],
+    origin: true, // Temporalmente permitir todos los orígenes para debug
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+    optionsSuccessStatus: 200,
   })
 );
 app.use(express.json({ limit: "10mb" }));
