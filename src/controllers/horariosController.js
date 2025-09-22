@@ -33,8 +33,8 @@ export const createHorario = async (req, res) => {
       working_weekdays,
       holiday_overrides,
       sunday_overrides,
+      lider_id, // Ahora se envía desde el frontend
     } = req.body;
-    const lider_id = req.user.id;
 
     if (!Array.isArray(working_weekdays) || working_weekdays.length === 0) {
       return res
@@ -57,7 +57,7 @@ export const createHorario = async (req, res) => {
 
     const payloadSemanales = horariosSemanales.map((horario) => ({
       empleado_id,
-      lider_id,
+      lider_id: lider_id || null, // Usar el lider_id del body o null
       tipo: "semanal",
       dias: horario.dias,
       fecha_inicio: horario.fecha_inicio,
@@ -209,7 +209,7 @@ export const updateHorario = async (req, res) => {
       const wd = isoWeekday(new Date(d.fecha));
       const totalHours = Number(d.horas || 0);
       const isReduced = Boolean(d.jornada_reducida);
-      const tipoJornadaReducida = d.tipo_jornada_reducida || 'salir-temprano';
+      const tipoJornadaReducida = d.tipo_jornada_reducida || "salir-temprano";
 
       const dailyCap = getDailyCapacity(wd, false, null);
       if (totalHours > dailyCap + 1e-6) {
@@ -235,7 +235,13 @@ export const updateHorario = async (req, res) => {
 
       if (totalHours > 0 && wd !== 7) {
         // Pasar el parámetro tipoJornadaReducida a getDayInfo
-        const dayInfo = getDayInfo(wd, false, null, isReduced, tipoJornadaReducida);
+        const dayInfo = getDayInfo(
+          wd,
+          false,
+          null,
+          isReduced,
+          tipoJornadaReducida
+        );
         const { blocks, entryTime, exitTime } = allocateHoursRandomly(
           d.fecha,
           dayInfo,

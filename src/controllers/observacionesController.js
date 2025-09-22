@@ -22,6 +22,7 @@ export const createObservacion = async (req, res) => {
     file_name,
     fecha_novedad,
     horario_estudio,
+    lider_id, // Ahora se envía desde el frontend
   } = req.body;
   let urlPublic = null;
   try {
@@ -43,7 +44,7 @@ export const createObservacion = async (req, res) => {
       observacion,
       tipo_novedad,
       documento_adjunto: urlPublic,
-      lider_id: req.user.id,
+      lider_id: lider_id || null, // Usar el lider_id del body o null
       fecha_novedad,
       horario_estudio: tipo_novedad === "Estudio" ? horario_estudio : null,
     };
