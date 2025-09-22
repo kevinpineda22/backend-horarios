@@ -94,4 +94,87 @@ router.post("/consulta-horarios", async (req, res) => {
   }
 });
 
+// POST /api/public/observaciones-stats
+router.post("/observaciones-stats", async (req, res) => {
+  try {
+    const { empleado_ids } = req.body;
+
+    if (!Array.isArray(empleado_ids) || empleado_ids.length === 0) {
+      return res
+        .status(400)
+        .json({ message: "Se requiere un array de empleado_ids" });
+    }
+
+    const results = [];
+
+    // Procesar cada empleado individualmente
+    for (const empleadoId of empleado_ids) {
+      try {
+        const { data: obs, error: obsError } = await client.get(
+          `/observaciones?select=tipo_novedad,fecha_novedad&empleado_id=eq.${empleadoId}`
+        );
+
+        if (obsError) {
+          console.error(
+            `Error fetching observaciones for ${empleadoId}:`,
+            obsError
+          );
+          continue;
+        }
+
+        const now = new Date();
+        const thirtyDaysAgo = new Date(
+          now.getTime() - 30 * 24 * 60 * 60 * 1000
+        );
+
+        // Filtrar observaciones recientes (últimos 30 días)
+        const recientes = obs.filter((o) => {
+          const fechaObs = new Date(o.fecha_novedad);
+          return fechaObs >= thirtyDaysAgo;
+        });
+
+        // Obtener tipos únicos de novedades
+        const tipos = [...new Set(obs.map((o) => o.tipo_novedad))];
+
+        // Encontrar la fecha de la última observación
+        const ultimaFecha =
+          obs.length > 0
+            ? obs.reduce(
+                (max, o) =>
+                  new Date(o.fecha_novedad) > new Date(max)
+                    ? o.fecha_novedad
+                    : max,
+                obs[0].fecha_novedad
+              )
+            : null;
+
+        results.push({
+          empleado_id: empleadoId,
+          total_observaciones: obs.length,
+          observaciones_recientes: recientes.length,
+          ultima_observacion: ultimaFecha,
+          tipos_novedades: tipos,
+        });
+      } catch (err) {
+        console.error(`Error processing empleado ${empleadoId}:`, err);
+        results.push({
+          empleado_id: empleadoId,
+          total_observaciones: 0,
+          observaciones_recientes: 0,
+          ultima_observacion: null,
+          tipos_novedades: [],
+        });
+      }
+    }
+
+    res.json(results);
+  } catch (error) {
+    console.error("Error en observaciones-stats:", error);
+    res.status(500).json({
+      message: "Error al obtener estadísticas de observaciones",
+      error: error.message,
+    });
+  }
+});
+
 export default router;
