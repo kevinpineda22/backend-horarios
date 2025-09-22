@@ -208,6 +208,8 @@ export const updateHorario = async (req, res) => {
       const d = updatedDias[i];
       const wd = isoWeekday(new Date(d.fecha));
       const totalHours = Number(d.horas || 0);
+      const isReduced = Boolean(d.jornada_reducida);
+      const tipoJornadaReducida = d.tipo_jornada_reducida || 'salir-temprano';
 
       const dailyCap = getDailyCapacity(wd, false, null);
       if (totalHours > dailyCap + 1e-6) {
@@ -232,7 +234,7 @@ export const updateHorario = async (req, res) => {
       d.horas_extra = extra;
 
       if (totalHours > 0 && wd !== 7) {
-        const dayInfo = getDayInfo(wd, false, null);
+        const dayInfo = getDayInfo(wd, false, null, isReduced, tipoJornadaReducida);
         const { blocks, entryTime, exitTime } = allocateHoursRandomly(
           d.fecha,
           dayInfo,
