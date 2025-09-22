@@ -1,25 +1,36 @@
-import dotenv from 'dotenv';
+import dotenv from "dotenv";
 dotenv.config();
-import express from 'express';
-import cors from 'cors';
+import express from "express";
+import cors from "cors";
 
-import horariosRoutes from './src/routes/horarios.js';
-import observacionesRoutes from './src/routes/observaciones.js';
-import publicRoutes from './src/routes/public.js';
-import empleadosRoutes from './src/routes/empleadosRoutes.js';
+import horariosRoutes from "./src/routes/horarios.js";
+import observacionesRoutes from "./src/routes/observaciones.js";
+import publicRoutes from "./src/routes/public.js";
+import empleadosRoutes from "./src/routes/empleadosRoutes.js";
 
 const app = express();
 const PORT = process.env.PORT;
 
-app.use(cors());
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(
+  cors({
+    origin: [
+      "http://localhost:3000",
+      "http://localhost:5173",
+      "https://merkahorro.com", // Agregar tu dominio de frontend
+    ],
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
-app.use('/api/horarios', horariosRoutes);
-app.use('/api/observaciones', observacionesRoutes);
-app.use('/api/empleados', empleadosRoutes);
-app.use('/api/public', publicRoutes);
+app.use("/api/horarios", horariosRoutes);
+app.use("/api/observaciones", observacionesRoutes);
+app.use("/api/empleados", empleadosRoutes);
+app.use("/api/public", publicRoutes);
 
-app.get('/', (_, res) => res.send('Gestor de Horarios API corriendooooo'));
+app.get("/", (_, res) => res.send("Gestor de Horarios API corriendooooo"));
 
 app.listen(PORT, () => console.log(`Server on port ${PORT}`));
