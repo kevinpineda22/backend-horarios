@@ -1,5 +1,11 @@
 import { supabaseAxios, storageClient } from "../services/supabaseAxios.js";
 import { Buffer } from "buffer";
+import { createClient } from "@supabase/supabase-js";
+
+const supabaseAuth = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_ANON_KEY
+);
 
 export const getObservacionesByEmpleadoId = async (req, res) => {
   const { empleado_id } = req.params;
@@ -235,33 +241,70 @@ export const getObservacionesStats = async (req, res) => {
 export const marcarEmpleadoRevisado = async (req, res) => {
   try {
     const { empleado_id } = req.body;
-    const lider_id = req.user?.id || null; // O como obtengas el ID del usuario actual
+
+    // Obtener el lider_id del token JWT o de la sesión
+    // Esto depende de cómo manejes la autenticación en tu backend
+    const token = req.headers.authorization?.replace("Bearer ", "");
+    let lider_id = null;
+
+    if (token) {
+      try {
+        // Decodificar el token de Supabase para obtener el user_id
+        const {
+          data: { user },
+          error,
+        } = await supabaseAuth.auth.getUser(token);
+        if (!error && user) {
+          // Buscar el empleado correspondiente a este usuario
+          const { data: empleado } = await supabaseAxios.get(
+            `/empleados?select=id&correo_electronico=eq.${user.email}&limit=1`
+          );
+          if (empleado && empleado.length > 0) {
+            lider_id = empleado[0].id;
+          }
+        }
+      } catch (authError) {
+        console.error("Error obteniendo usuario:", authError);
+      }
+    }
 
     if (!empleado_id) {
       return res.status(400).json({ message: "empleado_id es requerido" });
     }
 
-    // Crear o actualizar registro de revisión
-    const { data, error } = await supabaseAxios.post(
-      "/empleado_revisiones",
-      [
+    // Verificar si ya existe un registro para este empleado y líder
+    const { data: existingRecord } = await supabaseAxios.get(
+      `/empleado_revisiones?empleado_id=eq.${empleado_id}&lider_id=eq.${
+        lider_id || "null"
+      }&limit=1`
+    );
+
+    let result;
+    if (existingRecord && existingRecord.length > 0) {
+      // Actualizar registro existente
+      result = await supabaseAxios.patch(
+        `/empleado_revisiones?id=eq.${existingRecord[0].id}`,
+        {
+          fecha_revision: new Date().toISOString(),
+          ultima_revision_observaciones: new Date().toISOString(),
+        }
+      );
+    } else {
+      // Crear nuevo registro
+      result = await supabaseAxios.post("/empleado_revisiones", [
         {
           empleado_id,
           lider_id,
           fecha_revision: new Date().toISOString(),
           ultima_revision_observaciones: new Date().toISOString(),
         },
-      ],
-      {
-        headers: {
-          Prefer: "resolution=merge-duplicates",
-        },
-      }
-    );
+      ]);
+    }
 
-    if (error) throw error;
-
-    res.json({ message: "Empleado marcado como revisado", data });
+    res.json({
+      message: "Empleado marcado como revisado",
+      data: result.data,
+    });
   } catch (error) {
     console.error("Error marcando empleado como revisado:", error);
     res.status(500).json({
