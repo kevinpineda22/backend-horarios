@@ -2,18 +2,7 @@ import { supabaseAxios, storageClient } from "../services/supabaseAxios.js";
 import { Buffer } from "buffer";
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseAuth = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_KEY
-);
-
-// Función helper para obtener fecha/hora de Colombia
-const getColombiaDateTime = () => {
-  const now = new Date();
-  // Colombia está en UTC-5 (sin horario de verano)
-  const colombiaTime = new Date(now.getTime() - 5 * 60 * 60 * 1000);
-  return colombiaTime.toISOString();
-};
+// Ya no se necesita supabaseAuth para obtener el lider_id, así que se elimina
 
 export const getObservacionesByEmpleadoId = async (req, res) => {
   const { empleado_id } = req.params;
@@ -36,7 +25,6 @@ export const createObservacion = async (req, res) => {
     file_name,
     fecha_novedad,
     horario_estudio,
-    lider_id,
   } = req.body;
   let urlPublic = null;
   try {
@@ -58,7 +46,6 @@ export const createObservacion = async (req, res) => {
       observacion,
       tipo_novedad,
       documento_adjunto: urlPublic,
-      lider_id: lider_id || null,
       fecha_novedad,
       horario_estudio: tipo_novedad === "Estudio" ? horario_estudio : null,
     };
@@ -147,30 +134,9 @@ export const deleteObservacion = async (req, res) => {
 export const getObservacionesStats = async (req, res) => {
   try {
     const { empleado_ids } = req.body;
-    const token = req.headers.authorization?.replace("Bearer ", "");
-    let lider_id = null;
-    if (token) {
-      try {
-        const {
-          data: { user },
-        } = await supabaseAuth.auth.getUser(token);
-        if (user) {
-          const { data: empleado } = await supabaseAxios.get(
-            `/empleados?select=id&correo_electronico=eq.${user.email}&limit=1`
-          );
-          if (empleado && empleado.length > 0) {
-            lider_id = empleado[0].id;
-          }
-        }
-      } catch (authError) {
-        console.error("Error obteniendo usuario del token:", authError);
-      }
-    }
 
     if (!Array.isArray(empleado_ids) || empleado_ids.length === 0) {
-      return res
-        .status(400)
-        .json({ message: "Se requiere un array de empleado_ids" });
+      return res.status(400).json({ message: "Se requiere un array de empleado_ids" });
     }
 
     const results = [];
@@ -182,26 +148,17 @@ export const getObservacionesStats = async (req, res) => {
         );
 
         if (obsError) {
-          console.error(
-            `Error fetching observaciones for ${empleadoId}:`,
-            obsError
-          );
+          console.error(`Error fetching observaciones for ${empleadoId}:`, obsError);
           continue;
         }
 
         let fechaUltimaRevision = null;
         const { data: revisiones } = await supabaseAxios.get(
-          `/empleado_revisiones?select=ultima_revision_observaciones&empleado_id=eq.${empleadoId}&lider_id=eq.${lider_id}&limit=1`
+          `/empleado_revisiones?select=ultima_revision_observaciones&empleado_id=eq.${empleadoId}&limit=1`
         );
 
         if (revisiones && revisiones.length > 0) {
-          // Convertir la fecha de revisión a zona horaria de Colombia para comparación
-          const revisionUTC = new Date(
-            revisiones[0].ultima_revision_observaciones
-          );
-          fechaUltimaRevision = new Date(
-            revisionUTC.getTime() - 5 * 60 * 60 * 1000
-          );
+          fechaUltimaRevision = new Date(revisiones[0].ultima_revision_observaciones);
         }
 
         let observacionesRecientes = 0;
@@ -210,7 +167,7 @@ export const getObservacionesStats = async (req, res) => {
           if (fechaUltimaRevision) {
             if (ultimaObservacionFecha > fechaUltimaRevision) {
               observacionesRecientes = obs.filter(
-                (o) => new Date(o.fecha_novedad) > fechaUltimaRevision
+                o => new Date(o.fecha_novedad) > fechaUltimaRevision
               ).length;
             }
           } else {
@@ -253,56 +210,30 @@ export const getObservacionesStats = async (req, res) => {
 export const marcarEmpleadoRevisado = async (req, res) => {
   try {
     const { empleado_id } = req.body;
-    const token = req.headers.authorization?.replace("Bearer ", "");
-    let lider_id = null;
-
-    if (token) {
-      try {
-        const {
-          data: { user },
-        } = await supabaseAuth.auth.getUser(token);
-        if (user) {
-          const { data: empleado } = await supabaseAxios.get(
-            `/empleados?select=id&correo_electronico=eq.${user.email}&limit=1`
-          );
-          if (empleado && empleado.length > 0) {
-            lider_id = empleado[0].id;
-          }
-        }
-      } catch (authError) {
-        console.error("Error obteniendo usuario:", authError);
-      }
-    }
-
+    
     if (!empleado_id) {
       return res.status(400).json({ message: "empleado_id es requerido" });
     }
 
     const { data: existingRecord } = await supabaseAxios.get(
-      `/empleado_revisiones?empleado_id=eq.${empleado_id}&lider_id=eq.${
-        lider_id || "null"
-      }&limit=1`
+      `/empleado_revisiones?empleado_id=eq.${empleado_id}&limit=1`
     );
-
-    // Usar zona horaria de Colombia para el timestamp
-    const colombiaDateTime = getColombiaDateTime();
 
     let result;
     if (existingRecord && existingRecord.length > 0) {
       result = await supabaseAxios.patch(
         `/empleado_revisiones?id=eq.${existingRecord[0].id}`,
         {
-          ultima_revision_observaciones: colombiaDateTime,
-          fecha_revision: colombiaDateTime,
+          ultima_revision_observaciones: new Date().toISOString(),
+          fecha_revision: new Date().toISOString(),
         }
       );
     } else {
       result = await supabaseAxios.post("/empleado_revisiones", [
         {
           empleado_id,
-          lider_id,
-          ultima_revision_observaciones: colombiaDateTime,
-          fecha_revision: colombiaDateTime,
+          ultima_revision_observaciones: new Date().toISOString(),
+          fecha_revision: new Date().toISOString(),
         },
       ]);
     }
