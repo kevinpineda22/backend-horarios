@@ -12,5 +12,6 @@ router.get("/:empleado_id", ctrl.getObservacionesByEmpleadoId);
 router.post("/", ctrl.createObservacion);
 router.put("/:id", ctrl.updateObservacion);
 router.delete("/:id", ctrl.deleteObservacion);
+router.post("/marcar-revisado", ctrl.marcarEmpleadoRevisado);
 
 export default router;

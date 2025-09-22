@@ -147,6 +147,7 @@ export const getObservacionesStats = async (req, res) => {
     // Procesar cada empleado individualmente
     for (const empleadoId of empleado_ids) {
       try {
+        // Obtener observaciones
         const { data: obs, error: obsError } = await supabaseAxios.get(
           `/observaciones?select=tipo_novedad,fecha_novedad&empleado_id=eq.${empleadoId}`
         );
@@ -159,16 +160,31 @@ export const getObservacionesStats = async (req, res) => {
           continue;
         }
 
-        const now = new Date();
-        const thirtyDaysAgo = new Date(
-          now.getTime() - 30 * 24 * 60 * 60 * 1000
+        // Obtener última revisión
+        const { data: revision, error: revError } = await supabaseAxios.get(
+          `/empleado_revisiones?select=ultima_revision_observaciones&empleado_id=eq.${empleadoId}&order=fecha_revision.desc&limit=1`
         );
 
-        // Filtrar observaciones recientes (últimos 30 días)
-        const recientes = obs.filter((o) => {
-          const fechaObs = new Date(o.fecha_novedad);
-          return fechaObs >= thirtyDaysAgo;
-        });
+        const now = new Date();
+        const ultimaRevision =
+          revision && revision.length > 0
+            ? new Date(revision[0].ultima_revision_observaciones)
+            : null;
+
+        // Filtrar observaciones recientes (posteriores a la última revisión O últimos 30 días si no hay revisión)
+        let recientes;
+        if (ultimaRevision) {
+          recientes = obs.filter(
+            (o) => new Date(o.fecha_novedad) > ultimaRevision
+          );
+        } else {
+          const thirtyDaysAgo = new Date(
+            now.getTime() - 30 * 24 * 60 * 60 * 1000
+          );
+          recientes = obs.filter(
+            (o) => new Date(o.fecha_novedad) >= thirtyDaysAgo
+          );
+        }
 
         // Obtener tipos únicos de novedades
         const tipos = [...new Set(obs.map((o) => o.tipo_novedad))];
@@ -210,6 +226,46 @@ export const getObservacionesStats = async (req, res) => {
     console.error("Error en getObservacionesStats:", error);
     res.status(500).json({
       message: "Error al obtener estadísticas de observaciones",
+      error: error.message,
+    });
+  }
+};
+
+// En el controller de observaciones
+export const marcarEmpleadoRevisado = async (req, res) => {
+  try {
+    const { empleado_id } = req.body;
+    const lider_id = req.user?.id || null; // O como obtengas el ID del usuario actual
+
+    if (!empleado_id) {
+      return res.status(400).json({ message: "empleado_id es requerido" });
+    }
+
+    // Crear o actualizar registro de revisión
+    const { data, error } = await supabaseAxios.post(
+      "/empleado_revisiones",
+      [
+        {
+          empleado_id,
+          lider_id,
+          fecha_revision: new Date().toISOString(),
+          ultima_revision_observaciones: new Date().toISOString(),
+        },
+      ],
+      {
+        headers: {
+          Prefer: "resolution=merge-duplicates",
+        },
+      }
+    );
+
+    if (error) throw error;
+
+    res.json({ message: "Empleado marcado como revisado", data });
+  } catch (error) {
+    console.error("Error marcando empleado como revisado:", error);
+    res.status(500).json({
+      message: "Error al marcar empleado como revisado",
       error: error.message,
     });
   }
