@@ -7,6 +7,14 @@ const supabaseAuth = createClient(
   process.env.SUPABASE_KEY
 );
 
+// Función helper para obtener fecha/hora de Colombia
+const getColombiaDateTime = () => {
+  const now = new Date();
+  // Colombia está en UTC-5 (sin horario de verano)
+  const colombiaTime = new Date(now.getTime() - 5 * 60 * 60 * 1000);
+  return colombiaTime.toISOString();
+};
+
 export const getObservacionesByEmpleadoId = async (req, res) => {
   const { empleado_id } = req.params;
   try {
@@ -143,7 +151,9 @@ export const getObservacionesStats = async (req, res) => {
     let lider_id = null;
     if (token) {
       try {
-        const { data: { user } } = await supabaseAuth.auth.getUser(token);
+        const {
+          data: { user },
+        } = await supabaseAuth.auth.getUser(token);
         if (user) {
           const { data: empleado } = await supabaseAxios.get(
             `/empleados?select=id&correo_electronico=eq.${user.email}&limit=1`
@@ -158,7 +168,9 @@ export const getObservacionesStats = async (req, res) => {
     }
 
     if (!Array.isArray(empleado_ids) || empleado_ids.length === 0) {
-      return res.status(400).json({ message: "Se requiere un array de empleado_ids" });
+      return res
+        .status(400)
+        .json({ message: "Se requiere un array de empleado_ids" });
     }
 
     const results = [];
@@ -170,7 +182,10 @@ export const getObservacionesStats = async (req, res) => {
         );
 
         if (obsError) {
-          console.error(`Error fetching observaciones for ${empleadoId}:`, obsError);
+          console.error(
+            `Error fetching observaciones for ${empleadoId}:`,
+            obsError
+          );
           continue;
         }
 
@@ -180,7 +195,13 @@ export const getObservacionesStats = async (req, res) => {
         );
 
         if (revisiones && revisiones.length > 0) {
-          fechaUltimaRevision = new Date(revisiones[0].ultima_revision_observaciones);
+          // Convertir la fecha de revisión a zona horaria de Colombia para comparación
+          const revisionUTC = new Date(
+            revisiones[0].ultima_revision_observaciones
+          );
+          fechaUltimaRevision = new Date(
+            revisionUTC.getTime() - 5 * 60 * 60 * 1000
+          );
         }
 
         let observacionesRecientes = 0;
@@ -189,7 +210,7 @@ export const getObservacionesStats = async (req, res) => {
           if (fechaUltimaRevision) {
             if (ultimaObservacionFecha > fechaUltimaRevision) {
               observacionesRecientes = obs.filter(
-                o => new Date(o.fecha_novedad) > fechaUltimaRevision
+                (o) => new Date(o.fecha_novedad) > fechaUltimaRevision
               ).length;
             }
           } else {
@@ -237,7 +258,9 @@ export const marcarEmpleadoRevisado = async (req, res) => {
 
     if (token) {
       try {
-        const { data: { user } } = await supabaseAuth.auth.getUser(token);
+        const {
+          data: { user },
+        } = await supabaseAuth.auth.getUser(token);
         if (user) {
           const { data: empleado } = await supabaseAxios.get(
             `/empleados?select=id&correo_electronico=eq.${user.email}&limit=1`
@@ -261,13 +284,16 @@ export const marcarEmpleadoRevisado = async (req, res) => {
       }&limit=1`
     );
 
+    // Usar zona horaria de Colombia para el timestamp
+    const colombiaDateTime = getColombiaDateTime();
+
     let result;
     if (existingRecord && existingRecord.length > 0) {
       result = await supabaseAxios.patch(
         `/empleado_revisiones?id=eq.${existingRecord[0].id}`,
         {
-          ultima_revision_observaciones: new Date().toISOString(),
-          fecha_revision: new Date().toISOString(),
+          ultima_revision_observaciones: colombiaDateTime,
+          fecha_revision: colombiaDateTime,
         }
       );
     } else {
@@ -275,8 +301,8 @@ export const marcarEmpleadoRevisado = async (req, res) => {
         {
           empleado_id,
           lider_id,
-          ultima_revision_observaciones: new Date().toISOString(),
-          fecha_revision: new Date().toISOString(),
+          ultima_revision_observaciones: colombiaDateTime,
+          fecha_revision: colombiaDateTime,
         },
       ]);
     }
