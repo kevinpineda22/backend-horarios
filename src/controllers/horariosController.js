@@ -14,8 +14,18 @@ import { sendEmail } from "../services/emailService.js";
 
 export const getHorariosByEmpleadoId = async (req, res) => {
   const { empleado_id } = req.params;
+  const { incluir_archivados = "false" } = req.query;
+
   try {
-    const url = `/horarios?select=*&empleado_id=eq.${empleado_id}&estado_visibilidad=eq.publico&order=fecha_inicio.desc`;
+    let url = `/horarios?select=*&empleado_id=eq.${empleado_id}`;
+
+    // Si no se solicitan los archivados, solo mostrar públicos
+    if (incluir_archivados === "false") {
+      url += `&estado_visibilidad=eq.publico`;
+    }
+
+    url += `&order=fecha_inicio.desc`;
+
     const { data } = await supabaseAxios.get(url);
     res.json(data);
   } catch (e) {
@@ -308,9 +318,13 @@ export const archivarHorarios = async (req, res) => {
       .json({ message: "El ID del empleado es requerido." });
   }
   try {
-    await supabaseAxios.patch(`/horarios?empleado_id=eq.${empleado_id}`, {
-      estado_visibilidad: "archivado",
-    });
+    // Cambiar estado a "archivado" en lugar de eliminar
+    await supabaseAxios.patch(
+      `/horarios?empleado_id=eq.${empleado_id}&estado_visibilidad=eq.publico`,
+      {
+        estado_visibilidad: "archivado",
+      }
+    );
     res.json({ message: "Horarios del empleado archivados con éxito." });
   } catch (e) {
     console.error("Error archivando horarios:", e);
@@ -320,13 +334,19 @@ export const archivarHorarios = async (req, res) => {
 
 const archivarHorariosPorEmpleado = async (empleadoId) => {
   try {
+    // Verificar si hay horarios públicos para archivar
     const { data: horariosPublicos } = await supabaseAxios.get(
       `/horarios?select=id&empleado_id=eq.${empleadoId}&estado_visibilidad=eq.publico`
     );
+
     if (horariosPublicos && horariosPublicos.length > 0) {
+      // Cambiar estado a "archivado" manteniendo los registros
       await supabaseAxios.patch(
         `/horarios?empleado_id=eq.${empleadoId}&estado_visibilidad=eq.publico`,
         { estado_visibilidad: "archivado" }
+      );
+      console.log(
+        `${horariosPublicos.length} horarios archivados para el empleado ${empleadoId}.`
       );
     } else {
       console.log(

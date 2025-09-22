@@ -78,13 +78,15 @@ router.post("/consulta-horarios", async (req, res) => {
       return res
         .status(403)
         .json({ message: "El empleado se encuentra inactivo." });
-    } // 2. Obtener los horarios del empleado, filtrando por 'público'
+    }
 
+    // 2. Obtener SOLO los horarios públicos (activos) del empleado
     const { data: horariosData, error: horariosError } = await client.get(
       `/horarios?empleado_id=eq.${empleado.id}&estado_visibilidad=eq.publico&order=fecha_inicio.desc`
     );
-    if (horariosError) throw horariosError; // 3. Devolver el empleado y sus horarios
+    if (horariosError) throw horariosError;
 
+    // 3. Devolver el empleado y sus horarios activos
     res.json({ empleado, horarios: horariosData || [] });
   } catch (e) {
     console.error("Error en la consulta pública de horarios:", e);

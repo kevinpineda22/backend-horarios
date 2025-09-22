@@ -11,8 +11,18 @@ const router = express.Router();
 router.patch("/archivar", ctrl.archivarHorarios);
 
 /**
+ * GET  /api/horarios/:empleado_id/completo
+ * Devuelve el historial completo de horarios de un empleado (incluyendo archivados)
+ */
+router.get("/:empleado_id/completo", (req, res) => {
+  // Agregar query parameter para incluir archivados
+  req.query.incluir_archivados = "true";
+  ctrl.getHorariosByEmpleadoId(req, res);
+});
+
+/**
  * GET  /api/horarios/:empleado_id
- * Devuelve el historial de horarios de un empleado
+ * Devuelve el historial de horarios activos de un empleado
  */
 router.get("/:empleado_id", ctrl.getHorariosByEmpleadoId);
 
