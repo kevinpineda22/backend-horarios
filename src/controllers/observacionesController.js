@@ -150,10 +150,8 @@ export const getObservacionesStats = async (req, res) => {
 
     const results = [];
 
-    // Procesar cada empleado individualmente
     for (const empleadoId of empleado_ids) {
       try {
-        // Obtener observaciones
         const { data: obs, error: obsError } = await supabaseAxios.get(
           `/observaciones?select=tipo_novedad,fecha_novedad&empleado_id=eq.${empleadoId}`
         );
@@ -166,36 +164,35 @@ export const getObservacionesStats = async (req, res) => {
           continue;
         }
 
-        // Obtener última revisión
-        const { data: revision, error: revError } = await supabaseAxios.get(
-          `/empleado_revisiones?select=ultima_revision_observaciones&empleado_id=eq.${empleadoId}&order=fecha_revision.desc&limit=1`
+        // --- INICIO DE LA CORRECCIÓN ---
+        // 1. Consultar la última fecha de revisión para este empleado
+        const { data: revisiones, error: revisionError } = await supabaseAxios.get(
+          `/empleado_revisiones?select=ultima_revision_observaciones&empleado_id=eq.${empleadoId}&order=ultima_revision_observaciones.desc&limit=1`
         );
+        
+        let fechaUltimaRevision = null;
+        if (revisiones && revisiones.length > 0 && revisiones[0].ultima_revision_observaciones) {
+          fechaUltimaRevision = new Date(revisiones[0].ultima_revision_observaciones);
+        }
 
-        const now = new Date();
-        const ultimaRevision =
-          revision && revision.length > 0
-            ? new Date(revision[0].ultima_revision_observaciones)
-            : null;
-
-        // Filtrar observaciones recientes (posteriores a la última revisión O últimos 30 días si no hay revisión)
-        let recientes;
-        if (ultimaRevision) {
+        // 2. Filtrar observaciones recientes: aquellas posteriores a la última revisión
+        let recientes = [];
+        if (fechaUltimaRevision) {
           recientes = obs.filter(
-            (o) => new Date(o.fecha_novedad) > ultimaRevision
+            (o) => new Date(o.fecha_novedad) > fechaUltimaRevision
           );
         } else {
-          const thirtyDaysAgo = new Date(
-            now.getTime() - 30 * 24 * 60 * 60 * 1000
-          );
+          // Si no hay revisiones, se mantiene la lógica de los últimos 30 días como respaldo
+          const now = new Date();
+          const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
           recientes = obs.filter(
             (o) => new Date(o.fecha_novedad) >= thirtyDaysAgo
           );
         }
+        // --- FIN DE LA CORRECCIÓN ---
 
-        // Obtener tipos únicos de novedades
         const tipos = [...new Set(obs.map((o) => o.tipo_novedad))];
 
-        // Encontrar la fecha de la última observación
         const ultimaFecha =
           obs.length > 0
             ? obs.reduce(
@@ -216,7 +213,6 @@ export const getObservacionesStats = async (req, res) => {
         });
       } catch (err) {
         console.error(`Error processing empleado ${empleadoId}:`, err);
-        // Agregar entrada vacía para mantener consistencia
         results.push({
           empleado_id: empleadoId,
           total_observaciones: 0,
@@ -237,25 +233,21 @@ export const getObservacionesStats = async (req, res) => {
   }
 };
 
-// En el controller de observaciones
+
 export const marcarEmpleadoRevisado = async (req, res) => {
   try {
     const { empleado_id } = req.body;
 
-    // Obtener el lider_id del token JWT o de la sesión
-    // Esto depende de cómo manejes la autenticación en tu backend
     const token = req.headers.authorization?.replace("Bearer ", "");
     let lider_id = null;
 
     if (token) {
       try {
-        // Decodificar el token de Supabase para obtener el user_id
         const {
           data: { user },
           error,
         } = await supabaseAuth.auth.getUser(token);
         if (!error && user) {
-          // Buscar el empleado correspondiente a este usuario
           const { data: empleado } = await supabaseAxios.get(
             `/empleados?select=id&correo_electronico=eq.${user.email}&limit=1`
           );
@@ -281,7 +273,6 @@ export const marcarEmpleadoRevisado = async (req, res) => {
 
     let result;
     if (existingRecord && existingRecord.length > 0) {
-      // Actualizar registro existente
       result = await supabaseAxios.patch(
         `/empleado_revisiones?id=eq.${existingRecord[0].id}`,
         {
@@ -290,7 +281,6 @@ export const marcarEmpleadoRevisado = async (req, res) => {
         }
       );
     } else {
-      // Crear nuevo registro
       result = await supabaseAxios.post("/empleado_revisiones", [
         {
           empleado_id,
