@@ -273,6 +273,7 @@ export const marcarEmpleadoRevisado = async (req, res) => {
     }
 
     // Verificar si ya existe un registro para este empleado y líder
+    // Ahora, si lider_id es null, la búsqueda funcionará igualmente
     const { data: existingRecord } = await supabaseAxios.get(
       `/empleado_revisiones?empleado_id=eq.${empleado_id}&lider_id=eq.${
         lider_id || "null"
