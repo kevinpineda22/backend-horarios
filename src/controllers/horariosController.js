@@ -15,7 +15,7 @@ import { sendEmail } from "../services/emailService.js";
 export const getHorariosByEmpleadoId = async (req, res) => {
   const { empleado_id } = req.params;
   try {
-    const url = `/horarios?select=*&empleado_id=eq.${empleado_id}&order=fecha_inicio.desc`;
+    const url = `/horarios?select=*&empleado_id=eq.${empleado_id}&estado_visibilidad=eq.publico&order=fecha_inicio.desc`;
     const { data } = await supabaseAxios.get(url);
     res.json(data);
   } catch (e) {
@@ -234,6 +234,7 @@ export const updateHorario = async (req, res) => {
       d.horas_extra = extra;
 
       if (totalHours > 0 && wd !== 7) {
+        // Pasar el parámetro tipoJornadaReducida a getDayInfo
         const dayInfo = getDayInfo(wd, false, null, isReduced, tipoJornadaReducida);
         const { blocks, entryTime, exitTime } = allocateHoursRandomly(
           d.fecha,
