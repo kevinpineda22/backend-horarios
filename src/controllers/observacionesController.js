@@ -165,11 +165,9 @@ export const getObservacionesStats = async (req, res) => {
         if (obs && obs.length > 0) {
           const ultimaObservacionFecha = new Date(obs[0].fecha_novedad);
           if (fechaUltimaRevision) {
-            if (ultimaObservacionFecha > fechaUltimaRevision) {
-              observacionesRecientes = obs.filter(
-                o => new Date(o.fecha_novedad) > fechaUltimaRevision
-              ).length;
-            }
+            observacionesRecientes = obs.filter(
+              o => new Date(o.fecha_novedad) > fechaUltimaRevision
+            ).length;
           } else {
             observacionesRecientes = obs.length;
           }
