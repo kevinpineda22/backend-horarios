@@ -16,6 +16,7 @@ export const getHorariosByEmpleadoId = async (req, res) => {
   const { empleado_id } = req.params;
   const { incluir_archivados = "false" } = req.query;
 
+  
   try {
     let url = `/horarios?select=*&empleado_id=eq.${empleado_id}`;
 
