@@ -2,7 +2,7 @@ import { supabaseAxios, storageClient } from "../services/supabaseAxios.js";
 import { Buffer } from "buffer";
 import { createClient } from "@supabase/supabase-js";
 
-// Ya no se necesita supabaseAuth para obtener el lider_id, así que se elimina
+// Ya no se necesita supabaseAuth, se eliminó
 
 export const getObservacionesByEmpleadoId = async (req, res) => {
   const { empleado_id } = req.params;
