@@ -1,6 +1,6 @@
 import { supabaseAxios } from "../services/supabaseAxios.js";
 import {
-  generateScheduleForRange56,
+  generateSchedule, // Usamos la nueva función refactorizada
   getDailyCapacity,
   isoWeekday,
   WEEKLY_LEGAL_LIMIT,
@@ -12,13 +12,15 @@ import { getHolidaySet } from "../utils/holidays.js";
 import { format } from "date-fns";
 import { sendEmail } from "../services/emailService.js";
 
+// Definimos la constante aquí para que sea accesible en todo el archivo
+const WEEKLY_TOTAL_LIMIT = 56;
+
 export const getHorariosByEmpleadoId = async (req, res) => {
   const { empleado_id } = req.params;
   const { incluir_archivados = "false" } = req.query;
 
-  
   try {
-    let url = `/horarios?select=*&empleado_id=eq.${empleado_id}`;
+    let url = `/horarios?select=*,dias,total_horas_semana&empleado_id=eq.${empleado_id}`;
 
     // Si no se solicitan los archivados, solo mostrar públicos
     if (incluir_archivados === "false") {
@@ -52,15 +54,22 @@ export const createHorario = async (req, res) => {
         .json({ message: "working_weekdays es requerido." });
     }
 
+    // 1. Obtener el saldo de horas a compensar del empleado
+    const { data: empleadoData } = await supabaseAxios.get(
+      `/empleados?select=horas_para_compensar&id=eq.${empleado_id}`
+    );
+    const horasACompensar = empleadoData[0]?.horas_para_compensar || 0;
+
     const holidaySet = getHolidaySet(fecha_inicio, fecha_fin);
 
-    const { schedule: horariosSemanales } = generateScheduleForRange56(
+    const { schedule: horariosSemanales } = generateSchedule(
       fecha_inicio,
       fecha_fin,
       working_weekdays,
       holidaySet,
-      holiday_overrides || {},
-      sunday_overrides || {}
+      holidayOverrides || {},
+      sundayOverrides || {},
+      horasACompensar // Pasamos las horas a compensar
     );
 
     await archivarHorariosPorEmpleado(empleado_id);
@@ -78,6 +87,9 @@ export const createHorario = async (req, res) => {
     const { data: dataSemanales, error: errorSemanales } =
       await supabaseAxios.post("/horarios", payloadSemanales);
     if (errorSemanales) throw errorSemanales;
+
+    // 2. Resetear las horas a compensar del empleado, ya que se usaron en la primera semana
+    await supabaseAxios.patch(`/empleados?id=eq.${empleado_id}`, { horas_para_compensar: 0 });
 
     // Intentar enviar el correo electrónico
     let emailStatus = {
@@ -112,58 +124,58 @@ export const createHorario = async (req, res) => {
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Horario Asignado</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Horario Asignado</title>
 </head>
 <body style="font-family: Arial, sans-serif; background-color: #f5f5f5; margin: 0; padding: 20px;">
-    <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e0e0e0;">
-        <div style="background-color: #210d65; color: #ffffff; text-align: center; padding: 25px;">
-            <h1 style="margin: 0; font-size: 24px;">📅 Horario Asignado</h1>
-            <p style="margin: 10px 0 0 0; font-size: 16px;">Sistema de Gestión de Horarios</p>
-        </div>
-        
-        <div style="padding: 30px;">
-            <p style="font-size: 18px; color: #210d65; margin: 0 0 20px 0;">
-                Hola <strong>${empleado.nombre_completo}</strong>,
-            </p>
-            
-            <p style="color: #333333; font-size: 16px; margin: 0 0 20px 0; line-height: 1.5;">
-                Te informamos que tu nuevo horario laboral ha sido generado y asignado exitosamente.
-            </p>
-            
-            <div style="background-color: #f8f9ff; border-left: 3px solid #210d65; padding: 15px; margin: 20px 0;">
-                <p style="margin: 0 0 10px 0; color: #333333; font-size: 16px;">
-                    <strong>Período asignado:</strong>
-                </p>
-                <p style="font-size: 18px; color: #210d65; text-align: center; margin: 0; font-weight: bold;">
-                    ${fecha_inicio} al ${fecha_fin}
-                </p>
-            </div>
-            
-            <hr style="border: none; height: 1px; background-color: #e0e0e0; margin: 25px 0;">
-            
-            <p style="color: #333333; font-size: 16px; text-align: center; margin: 0 0 25px 0; line-height: 1.5;">
-                Puedes consultar los detalles completos de tu horario haciendo clic en el siguiente enlace:
-            </p>
-            
-            <div style="text-align: center;">
-                <a href="${publicUrl}" style="background-color: #210d65; color: #ffffff; text-decoration: none; padding: 12px 30px; font-size: 16px; font-weight: bold;">
-                    Ver Mi Horario
-                </a>
-            </div>
-        </div>
-        
-        <div style="background-color: #f8f9fa; padding: 20px; text-align: center; border-top: 1px solid #e0e0e0;">
-            <p style="margin: 0; color: #666666; font-size: 14px;">Este es un mensaje automatizado del sistema de horarios.</p>
-            <p style="margin: 5px 0 0 0; font-size: 12px; color: #666666;">
-                Si tienes alguna consulta, contacta a tu supervisor directo.
-            </p>
-        </div>
-    </div>
+    <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e0e0e0;">
+        <div style="background-color: #210d65; color: #ffffff; text-align: center; padding: 25px;">
+            <h1 style="margin: 0; font-size: 24px;">📅 Horario Asignado</h1>
+            <p style="margin: 10px 0 0 0; font-size: 16px;">Sistema de Gestión de Horarios</p>
+        </div>
+        
+        <div style="padding: 30px;">
+            <p style="font-size: 18px; color: #210d65; margin: 0 0 20px 0;">
+                Hola <strong>${empleado.nombre_completo}</strong>,
+            </p>
+            
+            <p style="color: #333333; font-size: 16px; margin: 0 0 20px 0; line-height: 1.5;">
+                Te informamos que tu nuevo horario laboral ha sido generado y asignado exitosamente.
+            </p>
+            
+            <div style="background-color: #f8f9ff; border-left: 3px solid #210d65; padding: 15px; margin: 20px 0;">
+                <p style="margin: 0 0 10px 0; color: #333333; font-size: 16px;">
+                    <strong>Período asignado:</strong>
+                </p>
+                <p style="font-size: 18px; color: #210d65; text-align: center; margin: 0; font-weight: bold;">
+                    ${fecha_inicio} al ${fecha_fin}
+                </p>
+            </div>
+            
+            <hr style="border: none; height: 1px; background-color: #e0e0e0; margin: 25px 0;">
+            
+            <p style="color: #333333; font-size: 16px; text-align: center; margin: 0 0 25px 0; line-height: 1.5;">
+                Puedes consultar los detalles completos de tu horario haciendo clic en el siguiente enlace:
+            </p>
+            
+            <div style="text-align: center;">
+                <a href="${publicUrl}" style="background-color: #210d65; color: #ffffff; text-decoration: none; padding: 12px 30px; font-size: 16px; font-weight: bold;">
+                    Ver Mi Horario
+                </a>
+            </div>
+        </div>
+        
+        <div style="background-color: #f8f9fa; padding: 20px; text-align: center; border-top: 1px solid #e0e0e0;">
+            <p style="margin: 0; color: #666666; font-size: 14px;">Este es un mensaje automatizado del sistema de horarios.</p>
+            <p style="margin: 5px 0 0 0; font-size: 12px; color: #666666;">
+                Si tienes alguna consulta, contacta a tu supervisor directo.
+            </p>
+        </div>
+    </div>
 </body>
 </html>
-              `;
+              `;
 
         await sendEmail(empleado.correo_electronico, subject, htmlContent);
         emailStatus.sent = true;
