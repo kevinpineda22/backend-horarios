@@ -359,6 +359,7 @@ const archivarHorariosPorEmpleado = async (empleadoId) => {
       console.log(
         `${horariosPublicos.length} horarios archivados para el empleado ${empleadoId}.`
       );
+      
     } else {
       console.log(
         `No se encontraron horarios públicos para el empleado ${empleadoId}. No se archivó nada.`
