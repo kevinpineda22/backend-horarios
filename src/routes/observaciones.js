@@ -8,6 +8,7 @@ const router = express.Router();
  */
 router.post("/stats", ctrl.getObservacionesStats);
 
+router.patch("/:empleado_id/marcar-revisadas", ctrl.marcarComoRevisadas); // <- NUEVA RUTA
 router.get("/:empleado_id", ctrl.getObservacionesByEmpleadoId);
 router.post("/", ctrl.createObservacion);
 router.put("/:id", ctrl.updateObservacion);
