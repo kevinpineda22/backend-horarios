@@ -1,6 +1,5 @@
 import { supabaseAxios, storageClient } from "../services/supabaseAxios.js";
 import { Buffer } from "buffer";
-import { createClient } from "@supabase/supabase-js";
 
 // Ya no se necesita supabaseAuth, se eliminó
 
@@ -136,7 +135,9 @@ export const getObservacionesStats = async (req, res) => {
     const { empleado_ids } = req.body;
 
     if (!Array.isArray(empleado_ids) || empleado_ids.length === 0) {
-      return res.status(400).json({ message: "Se requiere un array de empleado_ids" });
+      return res
+        .status(400)
+        .json({ message: "Se requiere un array de empleado_ids" });
     }
 
     const results = [];
@@ -148,7 +149,10 @@ export const getObservacionesStats = async (req, res) => {
         );
 
         if (obsError) {
-          console.error(`Error fetching observaciones for ${empleadoId}:`, obsError);
+          console.error(
+            `Error fetching observaciones for ${empleadoId}:`,
+            obsError
+          );
           continue;
         }
 
@@ -158,7 +162,9 @@ export const getObservacionesStats = async (req, res) => {
         );
 
         if (revisiones && revisiones.length > 0) {
-          fechaUltimaRevision = new Date(revisiones[0].ultima_revision_observaciones);
+          fechaUltimaRevision = new Date(
+            revisiones[0].ultima_revision_observaciones
+          );
         }
 
         let observacionesRecientes = 0;
@@ -166,7 +172,7 @@ export const getObservacionesStats = async (req, res) => {
           const ultimaObservacionFecha = new Date(obs[0].fecha_novedad);
           if (fechaUltimaRevision) {
             observacionesRecientes = obs.filter(
-              o => new Date(o.fecha_novedad) > fechaUltimaRevision
+              (o) => new Date(o.fecha_novedad) > fechaUltimaRevision
             ).length;
           } else {
             observacionesRecientes = obs.length;
@@ -208,7 +214,7 @@ export const getObservacionesStats = async (req, res) => {
 export const marcarEmpleadoRevisado = async (req, res) => {
   try {
     const { empleado_id } = req.body;
-    
+
     if (!empleado_id) {
       return res.status(400).json({ message: "empleado_id es requerido" });
     }

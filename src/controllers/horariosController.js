@@ -43,7 +43,6 @@ export const createHorario = async (req, res) => {
       working_weekdays,
       holiday_overrides,
       sunday_overrides,
-      lider_id, // Ahora se envía desde el frontend
     } = req.body;
 
     if (!Array.isArray(working_weekdays) || working_weekdays.length === 0) {
@@ -67,7 +66,6 @@ export const createHorario = async (req, res) => {
 
     const payloadSemanales = horariosSemanales.map((horario) => ({
       empleado_id,
-      lider_id: lider_id || null, // Usar el lider_id del body o null
       tipo: "semanal",
       dias: horario.dias,
       fecha_inicio: horario.fecha_inicio,
