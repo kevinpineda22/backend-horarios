@@ -17,13 +17,15 @@ const uploadFileAndGetUrl = async (
     if (typeof base64 === "string" && base64.startsWith("http")) return base64;
 
     const buf = Buffer.from(base64, "base64");
-    const fn = `${Date.now()}_${Math.random()
-        .toString(36)
-        .substr(2)}_${fileName}`;
+    // Usamos un nombre fijo para las firmas y un UUID para evitar colisiones
+    const fn = `firma_${fileName}_${Date.now()}.png`;
 
     const { data, error } = await storageClient.storage
         .from(bucketName)
-        .upload(fn, buf, { upsert: true });
+        .upload(fn, buf, { 
+            upsert: true,
+            contentType: 'image/png' // Forzar el tipo de contenido para firmas
+        });
 
     if (error) throw new Error(`Error al subir archivo: ${error.message}`);
 
@@ -92,7 +94,8 @@ const getDetailsPayload = (body) => {
 export const getObservacionesByEmpleadoId = async (req, res) => {
     const { empleado_id } = req.params;
     try {
-        const url = `/observaciones?select=*,details,documento_incapacidad,documento_historia_clinica&empleado_id=eq.${empleado_id}&order=fecha_creacion.desc`;
+        // Incluir la nueva columna documento_firma
+        const url = `/observaciones?select=*,details,documento_incapacidad,documento_historia_clinica,documento_firma&empleado_id=eq.${empleado_id}&order=fecha_creacion.desc`;
         const { data, error } = await supabaseAxios.get(url);
         if (error) throw error;
         res.json(data);
@@ -107,11 +110,13 @@ export const createObservacion = async (req, res) => {
         empleado_id, observacion, tipo_novedad, fecha_novedad, shouldNotify,
         documento_base64, file_name, 
         incapacidad_base64, incapacidad_file_name, historia_base64, historia_file_name,
+        firma_base64, // <-- NUEVA FIRMA BASE64
     } = req.body;
 
     let urlPublic = null; 
     let urlIncapacidad = null;
     let urlHistoria = null;
+    let urlFirma = null; // <-- NUEVA URL DE FIRMA
 
     try {
         // 1. Validar y subir archivos
@@ -128,6 +133,12 @@ export const createObservacion = async (req, res) => {
         } else {
             urlPublic = await uploadFileAndGetUrl(documento_base64, file_name, "documentos-observaciones-ph");
         }
+        
+        // **GESTIÓN DE LA FIRMA DIGITAL**
+        if (firma_base64) {
+             // Subimos la firma. Usamos la cédula o un ID único como "nombre del archivo"
+            urlFirma = await uploadFileAndGetUrl(firma_base64, empleado_id, "documentos-observaciones-ph"); 
+        }
 
         // 2. Construir el payload final para la DB
         const payload = {
@@ -142,6 +153,7 @@ export const createObservacion = async (req, res) => {
             documento_adjunto: tipo_novedad !== "Incapacidades" ? urlPublic : null,
             documento_incapacidad: tipo_novedad === "Incapacidades" ? urlIncapacidad || null : null,
             documento_historia_clinica: tipo_novedad === "Incapacidades" ? urlHistoria || null : null,
+            documento_firma: urlFirma || null, // <-- GUARDAR URL DE LA FIRMA
         };
 
         const { data, error } = await supabaseAxios.post("/observaciones", [payload]);
@@ -222,14 +234,19 @@ export const updateObservacion = async (req, res) => {
         incapacidad_base64, incapacidad_file_name, historia_base64, historia_file_name,
         documento_incapacidad, documento_historia_clinica, 
         shouldNotify,
+        firma_base64, // <-- NUEVA FIRMA BASE64
+        documento_firma, // <-- URL DE LA FIRMA EXISTENTE
     } = req.body;
 
     let urlPublic = documento_adjunto_existente;
     let urlIncapacidad = documento_incapacidad;
     let urlHistoria = documento_historia_clinica;
+    let urlFirma = documento_firma; // Inicializar con la URL existente
 
     try {
-        // 1. Manejo de Archivos
+        // 1. Manejo de Archivos (Incapacidad/General)
+        // ... (Lógica de Incapacidad/Restricciones se mantiene igual) ...
+        
         if (tipo_novedad === "Incapacidades") {
             const validationError = validateIncapacidadPayload(req.body);
             if (validationError) { return res.status(400).json({ message: validationError }); }
@@ -262,6 +279,19 @@ export const updateObservacion = async (req, res) => {
             urlHistoria = null;
         }
 
+        // 1b. **GESTIÓN DE LA FIRMA DIGITAL (Update)**
+        if (firma_base64 && !firma_base64.startsWith("http")) {
+             // Si hay una nueva firma Base64, la subimos
+             urlFirma = await uploadFileAndGetUrl(firma_base64, id, "documentos-observaciones-ph");
+        } else if (firma_base64 === null && documento_firma) {
+             // Si se eliminó la firma en el frontend
+             const fileName = documento_firma.split("/").pop();
+             await storageClient.storage.from("documentos-observaciones-ph").remove([fileName]);
+             urlFirma = null;
+        }
+        // Si firma_base64 es undefined, la firma se mantiene igual (urlFirma = documento_firma)
+
+
         // 2. Construir el payload final para la DB
         const payload = {
             observacion,
@@ -273,6 +303,7 @@ export const updateObservacion = async (req, res) => {
             documento_adjunto: tipo_novedad !== "Incapacidades" ? urlPublic : null,
             documento_incapacidad: tipo_novedad === "Incapacidades" ? urlIncapacidad || null : null,
             documento_historia_clinica: tipo_novedad === "Incapacidades" ? urlHistoria || null : null,
+            documento_firma: urlFirma || null, // <-- ACTUALIZAR URL DE LA FIRMA
         };
 
         const { error } = await supabaseAxios.patch(
@@ -332,11 +363,12 @@ export const updateObservacion = async (req, res) => {
 export const deleteObservacion = async (req, res) => {
     const { id } = req.params;
     try {
+        // Incluir documento_firma en el fetch para poder eliminarlo del storage
         const {
             data: [obs],
             error: fetchError,
         } = await supabaseAxios.get(
-            `/observaciones?select=documento_adjunto,documento_incapacidad,documento_historia_clinica&id=eq.${id}`
+            `/observaciones?select=documento_adjunto,documento_incapacidad,documento_historia_clinica,documento_firma&id=eq.${id}`
         );
         if (fetchError) throw fetchError;
 
@@ -344,6 +376,7 @@ export const deleteObservacion = async (req, res) => {
             obs?.documento_adjunto,
             obs?.documento_incapacidad,
             obs?.documento_historia_clinica,
+            obs?.documento_firma, // <-- INCLUIR FIRMA
         ].filter((url) => url);
 
         for (const url of filesToDelete) {
