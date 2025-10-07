@@ -24,7 +24,7 @@ const uploadFileAndGetUrl = async (
         .from(bucketName)
         .upload(fn, buf, { 
             upsert: true,
-            contentType: 'image/png' // Forzar el tipo de contenido para firmas/archivos Base64
+            contentType: 'image/png' 
         });
 
     if (error) throw new Error(`Error al subir archivo: ${error.message}`);
@@ -82,17 +82,9 @@ const validateIncapacidadPayload = (payload) => {
 };
 
 // FUNCIÓN CENTRAL PARA CREAR EL OBJETO JSONB 'details'
-const getDetailsPayload = (body, urlFirmaLider) => {
+const getDetailsPayload = (body) => {
+    // La firma del líder ya NO está aquí, el frontend se encarga de que solo vengan los campos de novedad.
     const details = body.details || {};
-    
-    // Si la URL del Líder existe, la añadimos al JSONB.
-    if (urlFirmaLider) {
-        details.documento_firma_lider = urlFirmaLider;
-    } else if (urlFirmaLider === null) {
-        // Si se envió null desde el frontend (para borrar)
-        delete details.documento_firma_lider;
-    }
-
     return (Object.keys(details).length > 0) ? details : null;
 };
 
@@ -104,8 +96,8 @@ const getDetailsPayload = (body, urlFirmaLider) => {
 export const getObservacionesByEmpleadoId = async (req, res) => {
     const { empleado_id } = req.params;
     try {
-        // Obtenemos documento_firma (empleado) y details (donde está documento_firma_lider)
-        const url = `/observaciones?select=*,details,documento_incapacidad,documento_historia_clinica,documento_firma&empleado_id=eq.${empleado_id}&order=fecha_creacion.desc`;
+        // Obtenemos las dos columnas de firma directamente
+        const url = `/observaciones?select=*,details,documento_incapacidad,documento_historia_clinica,documento_firma_empleado,documento_firma_lider&empleado_id=eq.${empleado_id}&order=fecha_creacion.desc`;
         const { data, error } = await supabaseAxios.get(url);
         if (error) throw error;
         res.json(data);
@@ -120,6 +112,7 @@ export const createObservacion = async (req, res) => {
         empleado_id, observacion, tipo_novedad, fecha_novedad, shouldNotify,
         documento_base64, file_name, 
         incapacidad_base64, incapacidad_file_name, historia_base64, historia_file_name,
+        // Firmas Base64
         firma_empleado_base64, firma_lider_base64,
     } = req.body;
 
@@ -162,13 +155,13 @@ export const createObservacion = async (req, res) => {
             fecha_novedad,
             revisada: false,
             
-            // La URL del Lider se inyecta en details
-            details: getDetailsPayload(req.body, urlFirmaLider), 
+            details: getDetailsPayload(req.body), 
 
             documento_adjunto: tipo_novedad !== "Incapacidades" ? urlPublic : null,
             documento_incapacidad: tipo_novedad === "Incapacidades" ? urlIncapacidad || null : null,
             documento_historia_clinica: tipo_novedad === "Incapacidades" ? urlHistoria || null : null,
-            documento_firma: urlFirmaEmpleado || null, // <-- Firma Empleado va a la columna principal
+            documento_firma_empleado: urlFirmaEmpleado || null, // <-- Firma Empleado
+            documento_firma_lider: urlFirmaLider || null,     // <-- Firma Líder
         };
 
         const { data, error } = await supabaseAxios.post("/observaciones", [payload]);
@@ -192,20 +185,20 @@ export const updateObservacion = async (req, res) => {
         documento_incapacidad, documento_historia_clinica, 
         shouldNotify,
         // Firmas
-        firma_empleado_base64, documento_firma, // URL existente de empleado (columna principal)
-        firma_lider_base64, 
+        firma_empleado_base64, documento_firma_empleado, // URL existente de empleado
+        firma_lider_base64, documento_firma_lider,     // URL existente de líder
     } = req.body;
     
-    // Necesitamos obtener los detalles existentes para no perder la URL del líder si no se está actualizando
+    // Obtenemos los detalles existentes para no perder campos JSONB no relacionados con la firma
     const { data: [currentObs] } = await supabaseAxios.get(
-        `/observaciones?select=details,documento_firma&id=eq.${id}`
+        `/observaciones?select=details&id=eq.${id}`
     );
 
     let urlPublic = documento_adjunto_existente;
     let urlIncapacidad = documento_incapacidad;
     let urlHistoria = documento_historia_clinica;
-    let urlFirmaEmpleado = documento_firma; // URL del empleado existente
-    let urlFirmaLider = currentObs?.details?.documento_firma_lider || null; // URL del líder existente (del JSONB)
+    let urlFirmaEmpleado = documento_firma_empleado; // URL del empleado existente
+    let urlFirmaLider = documento_firma_lider;     // URL del líder existente
 
     try {
         // 1. Manejo de Archivos (General/Incapacidad)
@@ -242,24 +235,20 @@ export const updateObservacion = async (req, res) => {
 
         // 1b. GESTIÓN DE LAS DOS FIRMAS DIGITALES (Update)
         
-        // Firma Empleado (Columna principal: documento_firma)
+        // Firma Empleado
         if (firma_empleado_base64) {
-             // Subir nueva firma Empleado
              urlFirmaEmpleado = await uploadFileAndGetUrl(firma_empleado_base64, `${id}_empleado_upd`, "documentos-observaciones-ph");
-        } else if (firma_empleado_base64 === null && documento_firma) {
-             // Eliminar firma Empleado existente
-             const fileName = documento_firma.split("/").pop();
+        } else if (firma_empleado_base64 === null && documento_firma_empleado) {
+             const fileName = documento_firma_empleado.split("/").pop();
              await storageClient.storage.from("documentos-observaciones-ph").remove([fileName]);
              urlFirmaEmpleado = null;
         }
 
-        // Firma Líder (JSONB: details.documento_firma_lider)
+        // Firma Líder
         if (firma_lider_base64) {
-             // Subir nueva firma Líder
              urlFirmaLider = await uploadFileAndGetUrl(firma_lider_base64, `${id}_lider_upd`, "documentos-observaciones-ph");
-        } else if (firma_lider_base64 === null && currentObs?.details?.documento_firma_lider) {
-             // Eliminar firma Líder existente
-             const fileName = currentObs.details.documento_firma_lider.split("/").pop();
+        } else if (firma_lider_base64 === null && documento_firma_lider) {
+             const fileName = documento_firma_lider.split("/").pop();
              await storageClient.storage.from("documentos-observaciones-ph").remove([fileName]);
              urlFirmaLider = null;
         }
@@ -271,14 +260,19 @@ export const updateObservacion = async (req, res) => {
             tipo_novedad,
             fecha_novedad,
             
-            // La URL del Lider se pasa al helper que la insertará/actualizará en details.
+            // Mantener detalles existentes y no relacionados con la firma, si los hay.
             details: getDetailsPayload(req.body, urlFirmaLider),
             
             documento_adjunto: tipo_novedad !== "Incapacidades" ? urlPublic : null,
             documento_incapacidad: tipo_novedad === "Incapacidades" ? urlIncapacidad || null : null,
             documento_historia_clinica: tipo_novedad === "Incapacidades" ? urlHistoria || null : null,
-            documento_firma: urlFirmaEmpleado, // <-- URL FINAL DEL EMPLEADO
+            documento_firma_empleado: urlFirmaEmpleado || null, // URL FINAL DEL EMPLEADO
+            documento_firma_lider: urlFirmaLider || null,     // URL FINAL DEL LÍDER
         };
+        
+        // Limpiamos los campos Base64 del payload final antes de enviarlo al DB
+        delete payload.firma_empleado_base64;
+        delete payload.firma_lider_base64;
 
         const { error } = await supabaseAxios.patch(
             `/observaciones?id=eq.${id}`,
@@ -298,24 +292,20 @@ export const updateObservacion = async (req, res) => {
 export const deleteObservacion = async (req, res) => {
     const { id } = req.params;
     try {
-        // Incluir ambas columnas de firma en el fetch para poder eliminarlas
         const {
             data: [obs],
             error: fetchError,
         } = await supabaseAxios.get(
-            `/observaciones?select=documento_adjunto,documento_incapacidad,documento_historia_clinica,documento_firma,details&id=eq.${id}`
+            `/observaciones?select=documento_adjunto,documento_incapacidad,documento_historia_clinica,documento_firma_empleado,documento_firma_lider,details&id=eq.${id}`
         );
         if (fetchError) throw fetchError;
-
-        // Extraer la URL del líder del JSONB para la eliminación
-        const urlFirmaLider = obs?.details?.documento_firma_lider;
 
         const filesToDelete = [
             obs?.documento_adjunto,
             obs?.documento_incapacidad,
             obs?.documento_historia_clinica,
-            obs?.documento_firma, // Firma Empleado
-            urlFirmaLider,       // Firma Líder
+            obs?.documento_firma_empleado, 
+            obs?.documento_firma_lider, 
         ].filter((url) => url);
 
         for (const url of filesToDelete) {
