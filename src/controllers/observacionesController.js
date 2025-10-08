@@ -152,12 +152,10 @@ export const createObservacion = async (req, res) => {
       );
     } else if (tipo_novedad === "Restricciones/Recomendaciones") {
       if (!documento_base64) {
-        return res
-          .status(400)
-          .json({
-            message:
-              "Falta el archivo de Restricciones/Recomendaciones (obligatorio).",
-          });
+        return res.status(400).json({
+          message:
+            "Falta el archivo de Restricciones/Recomendaciones (obligatorio).",
+        });
       }
       urlPublic = await uploadFileAndGetUrl(
         documento_base64,
@@ -207,9 +205,16 @@ export const createObservacion = async (req, res) => {
       documento_firma_lider: urlFirmaLider || null, // <-- Firma Líder
     };
 
-    const { data, error } = await supabaseAxios.post("/observaciones", [
+    const { data, error } = await supabaseAxios.post(
+      "/observaciones?select=*,details,documento_incapacidad,documento_historia_clinica,documento_firma_empleado,documento_firma_lider",
       payload,
-    ]);
+      {
+        headers: {
+          Prefer: "return=representation",
+          "Content-Type": "application/json",
+        },
+      }
+    );
     if (error) throw error;
 
     // 3. Lógica de Notificación por Correo
