@@ -20,7 +20,7 @@ import {
 } from "./hoursBankController.js";
 
 const toFixedNumber = (value) => Number(Number(value || 0).toFixed(2));
-const OVERTIME_DAILY_CAP = 16; // Salvaguarda para ediciones manuales con horas extra.
+const OVERTIME_DAILY_CAP = 24; // Salvaguarda para ediciones manuales con horas extra.
 
 const applyBankedHours = (weeks, bankEntries) => {
   if (!Array.isArray(weeks) || weeks.length === 0) {
