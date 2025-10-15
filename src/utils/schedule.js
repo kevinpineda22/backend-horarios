@@ -317,7 +317,7 @@ export function generateScheduleForRange56(
     // Asignar horas legales primero - INCLUIR SÁBADOS EN LA SELECCIÓN ALEATORIA
     const eligibleDays = workableDays.filter((d) => {
       const wd = isoWeekday(d.date);
-      return wd >= 1 && wd <= 6; // Incluir de lunes a sábado
+      return wd >= 1 && wd <= 6 && !d.isHoliday; // evitar que festivos trabajados se marquen como reducidos
     });
 
     let reducedDayYmd = null;
@@ -331,8 +331,23 @@ export function generateScheduleForRange56(
       const totals = dayTotals.get(day.ymd);
       const isSaturday = isoWeekday(day.date) === 6;
       const isReduced = day.ymd === reducedDayYmd;
+      const isHolidayWorked = day.isHoliday && day.override === "work";
 
-      if (isSaturday && isReduced) {
+      if (isHolidayWorked) {
+        const capacity = Math.min(day.capacity || HOLIDAY_HOURS, 12);
+        const baseHours = Math.min(legalLeft, Math.min(4, capacity));
+        const extraHours = Math.min(
+          extraLeft,
+          Math.max(0, capacity - baseHours)
+        );
+        totals.base = baseHours;
+        totals.extra = extraHours;
+        totals.total = baseHours + extraHours;
+        legalLeft -= baseHours;
+        extraLeft -= extraHours;
+        day.jornada_reducida = false;
+        day.festivo_trabajado = true;
+      } else if (isSaturday && isReduced) {
         // Sábado reducido: 6 horas totales (4 legales + 2 extras)
         const baseHours = Math.min(4, legalLeft);
         const extraHours = Math.min(2, extraLeft);
@@ -381,7 +396,8 @@ export function generateScheduleForRange56(
       const eligibleForExtra = workableDays.filter((day) => {
         const isSaturday = isoWeekday(day.date) === 6;
         const isReduced = day.ymd === reducedDayYmd;
-        return !isSaturday && !isReduced && legalLeft > 0;
+        const isHolidayWorked = day.isHoliday && day.override === "work";
+        return !isSaturday && !isReduced && !isHolidayWorked && legalLeft > 0;
       });
 
       // Distribuir las 4 horas legales restantes entre los días elegibles
@@ -418,6 +434,8 @@ export function generateScheduleForRange56(
         jornada_salida: exitTime || null,
         domingo_estado: null,
         jornada_reducida: x.jornada_reducida,
+        es_festivo: x.isHoliday || false,
+        festivo_trabajado: Boolean(x.festivo_trabajado),
       });
     }
 
