@@ -30,6 +30,15 @@ const applyBankedHours = (weeks, bankEntries) => {
   const weekSummariesMap = new Map();
   const bankUpdates = [];
 
+  const rotateDays = (days, seed) => {
+    if (!days.length) return days;
+    const hashSeed = seed
+      .split("")
+      .reduce((acc, ch) => (acc * 31 + ch.charCodeAt(0)) | 0, 0);
+    const startIndex = Math.abs(hashSeed) % days.length;
+    return days.slice(startIndex).concat(days.slice(0, startIndex));
+  };
+
   for (const entry of bankEntries) {
     let remaining = Number(
       entry.horas_pendientes ?? entry.horas_excedidas ?? 0
@@ -46,9 +55,15 @@ const applyBankedHours = (weeks, bankEntries) => {
       let weekApplied = false;
       const diasAjustados = [];
 
-      for (const day of week.dias || []) {
+      const candidates = rotateDays(
+        (week.dias || []).filter(
+          (d) => isoWeekday(d.fecha) !== 7 && Number(d.horas || 0) > 0
+        ),
+        `${entry.id}-${week.fecha_inicio}`
+      );
+
+      for (const day of candidates) {
         const wd = isoWeekday(day.fecha);
-        if (wd === 7) continue;
 
         const originalExtra = Number(day.horas_extra || 0);
         const originalBase = Number(day.horas_base || 0);
@@ -88,6 +103,13 @@ const applyBankedHours = (weeks, bankEntries) => {
 
         if (extraRemoved > 0 || baseRemoved > 0) {
           weekApplied = true;
+          day.horas_extra_reducidas = toFixedNumber(
+            Number(day.horas_extra_reducidas || 0) + extraRemoved
+          );
+          day.horas_legales_reducidas = toFixedNumber(
+            Number(day.horas_legales_reducidas || 0) + baseRemoved
+          );
+          day.banco_compensacion_id = entry.id;
           const dayInfo = getDayInfo(
             wd,
             false,
@@ -113,6 +135,87 @@ const applyBankedHours = (weeks, bankEntries) => {
         }
 
         if (remaining <= 0) break;
+      }
+
+      // Si aún quedan horas y no hubo candidatos, intentar con el resto
+      if (remaining > 0) {
+        for (const day of week.dias || []) {
+          if (remaining <= 0) break;
+          if (isoWeekday(day.fecha) === 7 || Number(day.horas || 0) <= 0) {
+            continue;
+          }
+          if (candidates.includes(day)) continue;
+
+          const wd = isoWeekday(day.fecha);
+          const originalExtra = Number(day.horas_extra || 0);
+          const originalBase = Number(day.horas_base || 0);
+          let extraRemoved = 0;
+          let baseRemoved = 0;
+
+          if (remaining > 0 && originalExtra > 0) {
+            extraRemoved = Math.min(originalExtra, remaining);
+            day.horas_extra = Math.max(
+              0,
+              toFixedNumber(originalExtra - extraRemoved)
+            );
+            day.horas = Math.max(
+              0,
+              toFixedNumber(Number(day.horas || 0) - extraRemoved)
+            );
+            remaining = toFixedNumber(remaining - extraRemoved);
+            consumed = toFixedNumber(consumed + extraRemoved);
+          }
+
+          if (remaining > 0) {
+            const updatedBase = Number(day.horas_base || 0);
+            if (updatedBase > 0) {
+              baseRemoved = Math.min(updatedBase, remaining);
+              day.horas_base = Math.max(
+                0,
+                toFixedNumber(updatedBase - baseRemoved)
+              );
+              day.horas = Math.max(
+                0,
+                toFixedNumber(Number(day.horas || 0) - baseRemoved)
+              );
+              remaining = toFixedNumber(remaining - baseRemoved);
+              consumed = toFixedNumber(consumed + baseRemoved);
+            }
+          }
+
+          if (extraRemoved > 0 || baseRemoved > 0) {
+            weekApplied = true;
+            day.horas_extra_reducidas = toFixedNumber(
+              Number(day.horas_extra_reducidas || 0) + extraRemoved
+            );
+            day.horas_legales_reducidas = toFixedNumber(
+              Number(day.horas_legales_reducidas || 0) + baseRemoved
+            );
+            day.banco_compensacion_id = entry.id;
+
+            const { blocks, entryTime, exitTime } = allocateHoursRandomly(
+              day.fecha,
+              getDayInfo(
+                wd,
+                false,
+                null,
+                Boolean(day.jornada_reducida),
+                day.tipo_jornada_reducida || "salir-temprano"
+              ),
+              Number(day.horas || 0)
+            );
+            day.bloques = blocks;
+            day.jornada_entrada = entryTime;
+            day.jornada_salida = exitTime;
+
+            diasAjustados.push({
+              fecha: day.fecha,
+              banco_id: entry.id,
+              horas_extra_reducidas: toFixedNumber(extraRemoved),
+              horas_legales_reducidas: toFixedNumber(baseRemoved),
+            });
+          }
+        }
       }
 
       if (weekApplied) {
