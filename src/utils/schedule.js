@@ -174,25 +174,17 @@ export function allocateHoursRandomly(dateISO, dayInfo, hoursNeeded) {
   }
 
   const { segments } = dayInfo;
-  // Agregamos esta validación para evitar el error 'from'
   if (!segments || segments.length === 0) {
     return { blocks: [], used: 0, entryTime: null, exitTime: null };
   }
 
-  const segmentsCapacityMins = segments.reduce(
-    (s, seg) => s + (seg.to - seg.from),
-    0
-  );
-  const requestedWorkMins = Math.round(hoursNeeded * 60);
-  const workMinutes = Math.min(requestedWorkMins, segmentsCapacityMins);
-
-  const start = segments[0].from;
-
-  let remaining = workMinutes;
-  let cursor = start;
-  const blocks = [];
+  const requestedWorkMins = Math.max(0, Math.round(hoursNeeded * 60));
+  let remaining = requestedWorkMins;
+  let cursor = segments[0].from;
+  const rawBlocks = [];
 
   for (const seg of segments) {
+    if (remaining <= 0) break;
     if (cursor < seg.from) cursor = seg.from;
     if (cursor >= seg.to) continue;
 
@@ -200,28 +192,38 @@ export function allocateHoursRandomly(dateISO, dayInfo, hoursNeeded) {
     if (availInSeg <= 0) continue;
 
     const take = Math.min(availInSeg, remaining);
-
-    blocks.push({
-      start: `${dateISO}T${minutesToHM(cursor)}:00`,
-      end: `${dateISO}T${minutesToHM(cursor + take)}:00`,
-      hours: take / 60,
+    rawBlocks.push({
+      startMinutes: cursor,
+      endMinutes: cursor + take,
     });
 
     cursor += take;
-    remaining = Math.max(0, remaining - take);
-    if (remaining <= 0) break;
+    remaining -= take;
   }
 
-  if (blocks.length === 0) {
-    return { blocks: [], used: 0, entryTime: null, exitTime: null };
+  if (rawBlocks.length === 0) {
+    rawBlocks.push({
+      startMinutes: segments[0].from,
+      endMinutes: segments[0].from,
+    });
   }
 
-  const entryTime = blocks[0].start.slice(11, 16);
-  const exitTime = blocks[blocks.length - 1].end.slice(11, 16);
+  if (remaining > 0) {
+    rawBlocks[rawBlocks.length - 1].endMinutes += remaining;
+  }
+
+  const blocks = rawBlocks.map((block) => ({
+    start: `${dateISO}T${minutesToHM(block.startMinutes)}:00`,
+    end: `${dateISO}T${minutesToHM(block.endMinutes)}:00`,
+    hours: (block.endMinutes - block.startMinutes) / 60,
+  }));
+
+  const entryTime = minutesToHM(rawBlocks[0].startMinutes);
+  const exitTime = minutesToHM(rawBlocks[rawBlocks.length - 1].endMinutes);
 
   return {
     blocks,
-    used: workMinutes / 60,
+    used: requestedWorkMins / 60,
     entryTime,
     exitTime,
   };

@@ -682,6 +682,19 @@ export const updateHorario = async (req, res) => {
       });
     }
 
+    const previousDays = Array.isArray(current?.dias) ? current.dias : [];
+    const previousDayMap = new Map(
+      previousDays.map((day) => [day.fecha, Number(day.horas || 0)])
+    );
+    const previousTotalHours = previousDays.reduce(
+      (sum, day) => sum + Number(day.horas || 0),
+      0
+    );
+    const previousWeeklyExcess = Math.max(
+      0,
+      toFixedNumber(previousTotalHours - WEEKLY_TOTAL_LIMIT)
+    );
+
     const minDate = parsedDays.reduce(
       (acc, day) => (day.parsedDate < acc ? day.parsedDate : acc),
       parsedDays[0].parsedDate
@@ -734,6 +747,9 @@ export const updateHorario = async (req, res) => {
     let legalSum = 0;
     let extraSum = 0;
     let totalSum = 0;
+    let manualOvertimeDelta = 0;
+    let manualOvertimeTotal = 0;
+    const manualOvertimeDetails = [];
 
     for (let i = 0; i < updatedDias.length; i++) {
       const d = updatedDias[i];
@@ -749,6 +765,24 @@ export const updateHorario = async (req, res) => {
           ? `Capacidad manual excedida (${effectiveCap}h)`
           : `Capacidad excedida (${dailyCap}h)`;
         return res.status(400).json({ message: `${capMsg} en ${d.fecha}` });
+      }
+
+      if (dailyCap > 0) {
+        const previousHours = previousDayMap.get(d.fecha) ?? 0;
+        const prevOver = Math.max(0, toFixedNumber(previousHours - dailyCap));
+        const newOver = Math.max(0, toFixedNumber(totalHours - dailyCap));
+        const deltaOver = toFixedNumber(newOver - prevOver);
+        manualOvertimeTotal = toFixedNumber(manualOvertimeTotal + newOver);
+        if (deltaOver > 0) {
+          manualOvertimeDelta = toFixedNumber(manualOvertimeDelta + deltaOver);
+          manualOvertimeDetails.push({
+            fecha: d.fecha,
+            limite_diario: dailyCap,
+            horas_previas: toFixedNumber(previousHours),
+            horas_nuevas: toFixedNumber(totalHours),
+            excedente_registrado: deltaOver,
+          });
+        }
       }
 
       let base, extra;
@@ -801,15 +835,39 @@ export const updateHorario = async (req, res) => {
 
     await supabaseAxios.patch(`/horarios?id=eq.${id}`, updatePayload);
 
-    const exceso = Number((totalSum - WEEKLY_TOTAL_LIMIT).toFixed(2));
-    if (exceso > 0) {
+    const weeklyExcesoTotal = Math.max(
+      0,
+      toFixedNumber(totalSum - WEEKLY_TOTAL_LIMIT)
+    );
+    const weeklyExcesoDelta = Math.max(
+      0,
+      toFixedNumber(weeklyExcesoTotal - previousWeeklyExcess)
+    );
+    const manualOvertimeDeltaPositive = Math.max(
+      0,
+      toFixedNumber(manualOvertimeDelta)
+    );
+    const manualOvertimeTotalRounded = toFixedNumber(manualOvertimeTotal);
+
+    if (weeklyExcesoDelta > 0) {
       await createOrUpdateExcess({
         empleadoId: current.empleado_id,
         semanaInicio: current.fecha_inicio,
         semanaFin: current.fecha_fin,
-        horasExcedidas: exceso,
+        horasExcedidas: weeklyExcesoDelta,
       });
-    } else {
+    }
+
+    if (manualOvertimeDeltaPositive > 0) {
+      await createOrUpdateExcess({
+        empleadoId: current.empleado_id,
+        semanaInicio: current.fecha_inicio,
+        semanaFin: current.fecha_fin,
+        horasExcedidas: manualOvertimeDeltaPositive,
+      });
+    }
+
+    if (weeklyExcesoTotal <= 0 && manualOvertimeTotalRounded <= 0) {
       await resetForSemana({
         empleadoId: current.empleado_id,
         semanaInicio: current.fecha_inicio,
@@ -822,7 +880,11 @@ export const updateHorario = async (req, res) => {
       total_horas: toFixedNumber(totalSum),
       horas_legales: toFixedNumber(legalSum),
       horas_extras: toFixedNumber(extraSum),
-      horas_excedentes_registradas: exceso > 0 ? exceso : 0,
+      horas_excedentes_registradas: weeklyExcesoTotal,
+      horas_excedentes_delta: weeklyExcesoDelta,
+      horas_manual_excedentes_registradas: manualOvertimeDeltaPositive,
+      horas_manual_totales_semana: manualOvertimeTotalRounded,
+      manual_overtime_details: manualOvertimeDetails,
     });
   } catch (e) {
     console.error("Error updating horarios:", e);
