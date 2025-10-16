@@ -115,8 +115,23 @@ const normalizeBlockingObservation = (rawObs) => {
     case "Permisos":
     case "Estudio":
     case "Día de la Familia":
-      startCandidate = rawObs.fecha_novedad || null;
-      endCandidate = rawObs.fecha_novedad || null;
+      startCandidate =
+        details.fecha_inicio ||
+        (details.fecha_propuesta_dia_familia &&
+        rawObs.tipo_novedad === "Día de la Familia"
+          ? details.fecha_propuesta_dia_familia
+          : null) ||
+        rawObs.fecha_novedad ||
+        null;
+      endCandidate =
+        details.fecha_fin ||
+        details.fecha_inicio ||
+        (details.fecha_propuesta_dia_familia &&
+        rawObs.tipo_novedad === "Día de la Familia"
+          ? details.fecha_propuesta_dia_familia
+          : null) ||
+        rawObs.fecha_novedad ||
+        null;
       break;
     default:
       startCandidate = rawObs.fecha_novedad || null;

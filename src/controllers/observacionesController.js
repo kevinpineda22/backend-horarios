@@ -90,6 +90,57 @@ const getDetailsPayload = (body) => {
   return Object.keys(details).length > 0 ? details : null;
 };
 
+const DATE_RANGE_VALIDATORS = {
+  Licencias: (details) => ({
+    start: details.fecha_inicio,
+    end: details.fecha_termino,
+  }),
+  Incapacidades: (details) => ({
+    start: details.fecha_inicio,
+    end: details.fecha_fin,
+  }),
+  Permisos: (details) => ({
+    start: details.fecha_inicio,
+    end: details.fecha_fin,
+  }),
+  Estudio: (details) => ({
+    start: details.fecha_inicio,
+    end: details.fecha_fin,
+  }),
+  "Día de la Familia": (details) => ({
+    start: details.fecha_inicio,
+    end: details.fecha_fin,
+  }),
+};
+
+const validateDateRangePayload = (tipoNovedad, details = {}) => {
+  const extractor = DATE_RANGE_VALIDATORS[tipoNovedad];
+  if (!extractor) return null;
+
+  const { start, end } = extractor(details) || {};
+  if (!start) {
+    return `La fecha de inicio es obligatoria para la novedad ${tipoNovedad}.`;
+  }
+  if (!end) {
+    return `La fecha de fin es obligatoria para la novedad ${tipoNovedad}.`;
+  }
+
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+
+  if (Number.isNaN(startDate.getTime())) {
+    return `La fecha de inicio enviada para ${tipoNovedad} no es válida.`;
+  }
+  if (Number.isNaN(endDate.getTime())) {
+    return `La fecha de fin enviada para ${tipoNovedad} no es válida.`;
+  }
+  if (endDate < startDate) {
+    return `La fecha de fin para ${tipoNovedad} no puede ser anterior a la fecha de inicio.`;
+  }
+
+  return null;
+};
+
 // ---------------------------------------------------------------
 // ENDPOINTS
 // ---------------------------------------------------------------
@@ -125,6 +176,13 @@ export const createObservacion = async (req, res) => {
     firma_empleado_base64,
     firma_lider_base64,
   } = req.body;
+
+  const details = req.body.details || {};
+
+  const dateRangeError = validateDateRangePayload(tipo_novedad, details);
+  if (dateRangeError) {
+    return res.status(400).json({ message: dateRangeError });
+  }
 
   let urlPublic = null;
   let urlIncapacidad = null;
@@ -322,10 +380,26 @@ export const updateObservacion = async (req, res) => {
   let urlFirmaEmpleado = documento_firma_empleado; // URL del empleado existente
   let urlFirmaLider = documento_firma_lider; // URL del líder existente
 
+  const mergedDetails = {
+    ...(currentObs?.details || {}),
+    ...(req.body.details || {}),
+  };
+
+  const updateDateRangeError = validateDateRangePayload(
+    tipo_novedad,
+    mergedDetails
+  );
+  if (updateDateRangeError) {
+    return res.status(400).json({ message: updateDateRangeError });
+  }
+
   try {
     // 1. Manejo de Archivos (General/Incapacidad)
     if (tipo_novedad === "Incapacidades") {
-      const validationError = validateIncapacidadPayload(req.body);
+      const validationError = validateIncapacidadPayload({
+        ...req.body,
+        details: mergedDetails,
+      });
       if (validationError) {
         return res.status(400).json({ message: validationError });
       }
@@ -414,7 +488,7 @@ export const updateObservacion = async (req, res) => {
       fecha_novedad,
 
       // Mantener detalles existentes y no relacionados con la firma, si los hay.
-      details: getDetailsPayload(req.body, urlFirmaLider),
+      details: getDetailsPayload({ ...req.body, details: mergedDetails }),
 
       documento_adjunto: tipo_novedad !== "Incapacidades" ? urlPublic : null,
       documento_incapacidad:
