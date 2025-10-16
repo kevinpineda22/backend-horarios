@@ -10,7 +10,7 @@ import {
   allocateHoursRandomly,
 } from "../utils/schedule.js";
 import { getHolidaySet } from "../utils/holidays.js";
-import { format } from "date-fns";
+import { format, parseISO, isValid, addDays } from "date-fns";
 import { sendEmail } from "../services/emailService.js";
 import {
   createOrUpdateExcess,
@@ -21,6 +21,153 @@ import {
 
 const toFixedNumber = (value) => Number(Number(value || 0).toFixed(2));
 const OVERTIME_DAILY_CAP = 24; // Salvaguarda para ediciones manuales con horas extra.
+
+const BLOCKING_NOVEDADES = new Set([
+  "Incapacidades",
+  "Licencias",
+  "Vacaciones",
+  "Permisos",
+  "Estudio",
+  "Día de la Familia",
+]);
+
+const parseDateOnly = (value) => {
+  if (!value) return null;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value;
+  }
+
+  const strValue = `${value}`.trim();
+  if (!strValue) return null;
+
+  const normalized = strValue.length > 10 ? strValue.slice(0, 10) : strValue;
+  const parsed = parseISO(normalized);
+  return isValid(parsed) ? parsed : null;
+};
+
+const toISODateString = (date) => format(date, "yyyy-MM-dd");
+
+const inferEndDate = (startDate, endCandidate, details) => {
+  let inferred = parseDateOnly(endCandidate);
+
+  if (!inferred || inferred < startDate) {
+    const duration = Number(details?.duracion_dias);
+    if (!Number.isNaN(duration) && duration > 0) {
+      inferred = addDays(startDate, duration - 1);
+    }
+  }
+
+  if ((!inferred || inferred < startDate) && details?.diasIncapacidad) {
+    const diasIncapacidad = details.diasIncapacidad;
+    const parsedNumber = Number(diasIncapacidad);
+
+    if (!Number.isNaN(parsedNumber) && parsedNumber > 0) {
+      inferred = addDays(startDate, parsedNumber - 1);
+    }
+  }
+
+  if (!inferred || inferred < startDate) {
+    inferred = startDate;
+  }
+
+  return inferred;
+};
+
+const normalizeBlockingObservation = (rawObs) => {
+  if (!rawObs || !BLOCKING_NOVEDADES.has(rawObs.tipo_novedad)) {
+    return null;
+  }
+
+  const details =
+    rawObs.details && typeof rawObs.details === "object" ? rawObs.details : {};
+
+  let startCandidate = null;
+  let endCandidate = null;
+
+  switch (rawObs.tipo_novedad) {
+    case "Vacaciones": {
+      startCandidate =
+        details.fecha_inicio_vacaciones || rawObs.fecha_novedad || null;
+
+      if (details.fecha_fin_vacaciones) {
+        endCandidate = details.fecha_fin_vacaciones;
+      } else if (details.fecha_regreso_vacaciones) {
+        const regresoDate = parseDateOnly(details.fecha_regreso_vacaciones);
+        if (regresoDate) {
+          endCandidate = toISODateString(addDays(regresoDate, -1));
+        }
+      }
+
+      if (!endCandidate) {
+        endCandidate =
+          details.fecha_inicio_vacaciones || rawObs.fecha_novedad || null;
+      }
+      break;
+    }
+    case "Licencias":
+      startCandidate = details.fecha_inicio || rawObs.fecha_novedad || null;
+      endCandidate = details.fecha_termino || details.fecha_inicio;
+      break;
+    case "Incapacidades":
+      startCandidate = details.fecha_inicio || rawObs.fecha_novedad || null;
+      endCandidate = details.fecha_fin || details.fecha_inicio;
+      break;
+    case "Permisos":
+    case "Estudio":
+    case "Día de la Familia":
+      startCandidate = rawObs.fecha_novedad || null;
+      endCandidate = rawObs.fecha_novedad || null;
+      break;
+    default:
+      startCandidate = rawObs.fecha_novedad || null;
+      endCandidate = rawObs.fecha_novedad || null;
+      break;
+  }
+
+  const startDate = parseDateOnly(startCandidate);
+  if (!startDate) {
+    return null;
+  }
+
+  const endDate = inferEndDate(startDate, endCandidate, details);
+
+  return {
+    id: rawObs.id,
+    tipo: rawObs.tipo_novedad,
+    observacion: rawObs.observacion || "",
+    start: toISODateString(startDate),
+    end: toISODateString(endDate),
+    rawStart: startDate,
+    rawEnd: endDate,
+  };
+};
+
+const fetchBlockingObservationsInRange = async (
+  empleadoId,
+  startDate,
+  endDate
+) => {
+  const { data, error } = await supabaseAxios.get(
+    `/observaciones?select=id,tipo_novedad,observacion,fecha_novedad,details&empleado_id=eq.${empleadoId}&order=fecha_novedad.desc`
+  );
+
+  if (error) {
+    throw error;
+  }
+
+  return (data || [])
+    .map((obs) => normalizeBlockingObservation(obs))
+    .filter(Boolean)
+    .filter((obs) => obs.rawEnd >= startDate && obs.rawStart <= endDate);
+};
+
+const serializeObservationForResponse = (obs) => ({
+  id: obs.id,
+  tipo: obs.tipo,
+  observacion: obs.observacion,
+  fecha_inicio: obs.start,
+  fecha_fin: obs.end,
+});
 
 const applyBankedHours = (weeks, bankEntries) => {
   if (!Array.isArray(weeks) || weeks.length === 0) {
@@ -296,6 +443,35 @@ export const createHorario = async (req, res) => {
         .json({ message: "working_weekdays es requerido." });
     }
 
+    const scheduleStart = parseDateOnly(fecha_inicio);
+    const scheduleEnd = parseDateOnly(fecha_fin);
+
+    if (!scheduleStart || !scheduleEnd) {
+      return res.status(400).json({
+        message: "Las fechas de inicio y fin del horario deben ser válidas.",
+      });
+    }
+
+    if (scheduleEnd < scheduleStart) {
+      return res.status(400).json({
+        message: "La fecha final no puede ser anterior a la fecha inicial.",
+      });
+    }
+
+    const blockingObservations = await fetchBlockingObservationsInRange(
+      empleado_id,
+      scheduleStart,
+      scheduleEnd
+    );
+
+    if (blockingObservations.length) {
+      return res.status(409).json({
+        message:
+          "No es posible generar el horario: existe(n) novedad(es) vigente(s) que bloquean el periodo solicitado.",
+        bloqueos: blockingObservations.map(serializeObservationForResponse),
+      });
+    }
+
     const holidaySet = getHolidaySet(fecha_inicio, fecha_fin);
 
     const { schedule: horariosSemanales } = generateScheduleForRange56(
@@ -475,6 +651,67 @@ export const updateHorario = async (req, res) => {
       return res
         .status(400)
         .json({ message: "El payload debe incluir 'dias' como arreglo." });
+    }
+
+    const parsedDays = dias
+      .map((day) => ({
+        fecha: day.fecha,
+        horas: Number(day.horas || 0),
+        parsedDate: parseDateOnly(day.fecha),
+      }))
+      .filter((day) => day.parsedDate);
+
+    if (!parsedDays.length) {
+      return res.status(400).json({
+        message: "Cada día debe incluir una fecha válida.",
+      });
+    }
+
+    const minDate = parsedDays.reduce(
+      (acc, day) => (day.parsedDate < acc ? day.parsedDate : acc),
+      parsedDays[0].parsedDate
+    );
+    const maxDate = parsedDays.reduce(
+      (acc, day) => (day.parsedDate > acc ? day.parsedDate : acc),
+      parsedDays[0].parsedDate
+    );
+
+    const blockingObservations = await fetchBlockingObservationsInRange(
+      current.empleado_id,
+      minDate,
+      maxDate
+    );
+
+    if (blockingObservations.length) {
+      const conflicts = [];
+      for (const obs of blockingObservations) {
+        const conflictDays = parsedDays
+          .filter(
+            (day) =>
+              day.horas > 0 &&
+              day.parsedDate >= obs.rawStart &&
+              day.parsedDate <= obs.rawEnd
+          )
+          .map((day) => ({
+            fecha: day.fecha,
+            horas: day.horas,
+          }));
+
+        if (conflictDays.length) {
+          conflicts.push({
+            ...serializeObservationForResponse(obs),
+            dias_conflictivos: conflictDays,
+          });
+        }
+      }
+
+      if (conflicts.length) {
+        return res.status(409).json({
+          message:
+            "No es posible actualizar el horario: hay novedades vigentes que bloquean las fechas seleccionadas.",
+          bloqueos: conflicts,
+        });
+      }
     }
 
     const updatedDias = JSON.parse(JSON.stringify(dias));
