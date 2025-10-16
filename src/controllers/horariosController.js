@@ -848,6 +848,31 @@ export const updateHorario = async (req, res) => {
       toFixedNumber(manualOvertimeDelta)
     );
     const manualOvertimeTotalRounded = toFixedNumber(manualOvertimeTotal);
+    const manualOvertimeToRegister = Math.max(
+      0,
+      toFixedNumber(manualOvertimeDeltaPositive - weeklyExcesoDelta)
+    );
+
+    let manualDetailsApplied = manualOvertimeDetails;
+    if (manualOvertimeDetails.length && manualOvertimeToRegister > 1e-6) {
+      let remainingManual = manualOvertimeToRegister;
+      manualDetailsApplied = manualOvertimeDetails.map((detail) => {
+        const applicable = Math.max(
+          0,
+          Math.min(detail.excedente_registrado, remainingManual)
+        );
+        remainingManual = toFixedNumber(remainingManual - applicable);
+        return {
+          ...detail,
+          registrado_en_banco: toFixedNumber(applicable),
+        };
+      });
+    } else if (manualOvertimeDetails.length) {
+      manualDetailsApplied = manualOvertimeDetails.map((detail) => ({
+        ...detail,
+        registrado_en_banco: 0,
+      }));
+    }
 
     if (weeklyExcesoDelta > 0) {
       await createOrUpdateExcess({
@@ -858,12 +883,12 @@ export const updateHorario = async (req, res) => {
       });
     }
 
-    if (manualOvertimeDeltaPositive > 0) {
+    if (manualOvertimeToRegister > 0) {
       await createOrUpdateExcess({
         empleadoId: current.empleado_id,
         semanaInicio: current.fecha_inicio,
         semanaFin: current.fecha_fin,
-        horasExcedidas: manualOvertimeDeltaPositive,
+        horasExcedidas: manualOvertimeToRegister,
       });
     }
 
@@ -882,9 +907,9 @@ export const updateHorario = async (req, res) => {
       horas_extras: toFixedNumber(extraSum),
       horas_excedentes_registradas: weeklyExcesoTotal,
       horas_excedentes_delta: weeklyExcesoDelta,
-      horas_manual_excedentes_registradas: manualOvertimeDeltaPositive,
+      horas_manual_excedentes_registradas: manualOvertimeToRegister,
       horas_manual_totales_semana: manualOvertimeTotalRounded,
-      manual_overtime_details: manualOvertimeDetails,
+      manual_overtime_details: manualDetailsApplied,
     });
   } catch (e) {
     console.error("Error updating horarios:", e);
