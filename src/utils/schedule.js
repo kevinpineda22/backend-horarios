@@ -143,8 +143,8 @@ export function getDayInfo(
     }
   }
 
-  const weekdayCapacity = wd === 6 ? 6 : 10;
-  const saturdayEndTime = "14:00";
+  const weekdayCapacity = wd === 6 ? 7 : 10; // Sábado: 7h, L-V: 10h
+  const saturdayEndTime = "15:00"; // Sábado hasta las 3pm (7h totales)
   const weekdayEndTime = "18:00";
 
   const info = {
@@ -360,9 +360,9 @@ export function generateScheduleForRange56(
         extraLeft -= extraHours;
         day.jornada_reducida = true;
       } else if (isSaturday && !isReduced) {
-        // Sábado normal: 6 horas totales (4 legales + 2 extras)
+        // Sábado normal: 7 horas totales (4 legales + 3 extras)
         const baseHours = Math.min(4, legalLeft);
-        const extraHours = Math.min(2, extraLeft);
+        const extraHours = Math.min(3, extraLeft);
         totals.base = baseHours;
         totals.extra = extraHours;
         totals.total = baseHours + extraHours;

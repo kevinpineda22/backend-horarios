@@ -38,13 +38,14 @@ const getLegalCapForDay = (weekday) => {
 };
 
 const getRegularDailyCap = (weekday) => {
-  if (weekday === 6) return 6;
-  if (weekday >= 1 && weekday <= 5) return 10;
+  if (weekday === 6) return 7; // Sábado: 7h totales (4h base + 3h extras)
+  if (weekday >= 1 && weekday <= 5) return 10; // L-V: 10h totales (8h base + 2h extras)
   return 0;
 };
 
 const getPayableExtraCapForDay = (weekday) => {
-  if (weekday >= 1 && weekday <= 6) return 2;
+  if (weekday === 6) return 3; // Sábado: 3h extras
+  if (weekday >= 1 && weekday <= 5) return 2; // L-V: 2h extras
   return 0;
 };
 
