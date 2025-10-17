@@ -967,18 +967,19 @@ export const deleteHorario = async (req, res) => {
     // Primero eliminar las relaciones de aplicación de horas banco si existen
     try {
       await supabaseAxios.delete(`/aplicacion_horas_banco?horario_id=eq.${id}`);
+      console.log(`Aplicaciones de horas banco eliminadas para horario ${id}`);
     } catch (bankErr) {
-      console.warn(
-        "No se encontraron aplicaciones de horas banco para eliminar:",
-        bankErr.message
-      );
+      // Si da 404, significa que no hay registros, lo cual está bien
+      if (bankErr.response?.status !== 404) {
+        console.warn(
+          "Advertencia al eliminar aplicaciones de horas banco:",
+          bankErr.response?.data || bankErr.message
+        );
+      }
     }
 
-    // Luego eliminar los días del horario
-    await supabaseAxios.delete(`/horarios_dias?horario_id=eq.${id}`);
-
-    // Finalmente eliminar el horario principal
-    await supabaseAxios.delete(`/horarios?id=eq.${id}`);
+    // Eliminar el horario principal (los días están en JSONB dentro del registro)
+    const deleteResult = await supabaseAxios.delete(`/horarios?id=eq.${id}`);
 
     res.json({ message: "Horario eliminado correctamente" });
   } catch (e) {
@@ -986,6 +987,7 @@ export const deleteHorario = async (req, res) => {
     res.status(500).json({
       message: "Error al eliminar el horario",
       error: e.response?.data?.message || e.message,
+      details: e.response?.data,
     });
   }
 };
