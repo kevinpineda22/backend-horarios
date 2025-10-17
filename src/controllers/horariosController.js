@@ -192,13 +192,17 @@ const applyBankedHours = (weeks, bankEntries) => {
   const weekSummariesMap = new Map();
   const bankUpdates = [];
 
-  const rotateDays = (days, seed) => {
-    if (!days.length) return days;
-    const hashSeed = seed
-      .split("")
-      .reduce((acc, ch) => (acc * 31 + ch.charCodeAt(0)) | 0, 0);
-    const startIndex = Math.abs(hashSeed) % days.length;
-    return days.slice(startIndex).concat(days.slice(0, startIndex));
+  const shuffleDays = (days) => {
+    const arr = [...days];
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      if (j !== i) {
+        const temp = arr[i];
+        arr[i] = arr[j];
+        arr[j] = temp;
+      }
+    }
+    return arr;
   };
 
   for (const entry of bankEntries) {
@@ -217,11 +221,10 @@ const applyBankedHours = (weeks, bankEntries) => {
       let weekApplied = false;
       const diasAjustados = [];
 
-      const candidates = rotateDays(
+      const candidates = shuffleDays(
         (week.dias || []).filter(
           (d) => isoWeekday(d.fecha) !== 7 && Number(d.horas || 0) > 0
-        ),
-        `${entry.id}-${week.fecha_inicio}`
+        )
       );
 
       for (const day of candidates) {
@@ -301,12 +304,14 @@ const applyBankedHours = (weeks, bankEntries) => {
 
       // Si aún quedan horas y no hubo candidatos, intentar con el resto
       if (remaining > 0) {
-        for (const day of week.dias || []) {
+        const remainingDays = shuffleDays(
+          (week.dias || []).filter((d) => !candidates.includes(d))
+        );
+        for (const day of remainingDays) {
           if (remaining <= 0) break;
           if (isoWeekday(day.fecha) === 7 || Number(day.horas || 0) <= 0) {
             continue;
           }
-          if (candidates.includes(day)) continue;
 
           const wd = isoWeekday(day.fecha);
           const originalExtra = Number(day.horas_extra || 0);
