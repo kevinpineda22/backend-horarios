@@ -20,7 +20,7 @@ import {
 } from "./hoursBankController.js";
 
 const toFixedNumber = (value) => Number(Number(value || 0).toFixed(2));
-const OVERTIME_DAILY_CAP = 24; // Salvaguarda para ediciones manuales con horas extra.
+const MAX_OVERTIME_PER_DAY = 4; // Horas adicionales permitidas para banco.
 
 const BLOCKING_NOVEDADES = new Set([
   "Incapacidades",
@@ -30,6 +30,23 @@ const BLOCKING_NOVEDADES = new Set([
   "Estudio",
   "Día de la Familia",
 ]);
+
+const getLegalCapForDay = (weekday) => {
+  if (weekday === 6) return 4;
+  if (weekday >= 1 && weekday <= 5) return 8;
+  return 0;
+};
+
+const getRegularDailyCap = (weekday) => {
+  if (weekday === 6) return 6;
+  if (weekday >= 1 && weekday <= 5) return 10;
+  return 0;
+};
+
+const getPayableExtraCapForDay = (weekday) => {
+  if (weekday >= 1 && weekday <= 6) return 2;
+  return 0;
+};
 
 const parseDateOnly = (value) => {
   if (!value) return null;
@@ -751,7 +768,10 @@ export const updateHorario = async (req, res) => {
     const allowOvertime = Boolean(req.body.allow_overtime);
     let legalSum = 0;
     let extraSum = 0;
+    let payableExtraSum = 0;
     let totalSum = 0;
+    let legalCapacitySum = 0;
+    let extraCapacitySum = 0;
     let manualOvertimeDelta = 0;
     let manualOvertimeTotal = 0;
     const manualOvertimeDetails = [];
@@ -764,7 +784,8 @@ export const updateHorario = async (req, res) => {
       const tipoJornadaReducida = d.tipo_jornada_reducida || "salir-temprano";
 
       const dailyCap = getDailyCapacity(wd, false, null);
-      const effectiveCap = allowOvertime ? OVERTIME_DAILY_CAP : dailyCap;
+      const overtimeCap = dailyCap + MAX_OVERTIME_PER_DAY;
+      const effectiveCap = allowOvertime ? overtimeCap : dailyCap;
       if (totalHours > effectiveCap + 1e-6) {
         const capMsg = allowOvertime
           ? `Capacidad manual excedida (${effectiveCap}h)`
@@ -790,17 +811,22 @@ export const updateHorario = async (req, res) => {
         }
       }
 
-      let base, extra;
-      if (wd === 7) {
-        base = 0;
-        extra = 0;
-      } else if (wd === 6) {
-        base = Math.min(4, totalHours);
-        extra = Math.max(0, totalHours - base);
-      } else {
-        base = Math.min(totalHours, 8);
-        extra = Math.max(0, totalHours - base);
+      const legalCapForDay = getLegalCapForDay(wd);
+      const payableExtraCap = getPayableExtraCapForDay(wd);
+
+      const base = Math.min(totalHours, legalCapForDay);
+      const extra = Math.max(0, totalHours - base);
+      const payableExtra = Math.min(extra, payableExtraCap);
+
+      if (totalHours > 0 && legalCapForDay > 0) {
+        legalCapacitySum = toFixedNumber(legalCapacitySum + legalCapForDay);
+        extraCapacitySum = toFixedNumber(extraCapacitySum + payableExtraCap);
       }
+
+      legalSum = toFixedNumber(legalSum + base);
+      extraSum = toFixedNumber(extraSum + extra);
+      payableExtraSum = toFixedNumber(payableExtraSum + payableExtra);
+      totalSum = toFixedNumber(totalSum + totalHours);
 
       d.horas_base = base;
       d.horas_extra = extra;
@@ -827,10 +853,23 @@ export const updateHorario = async (req, res) => {
         d.jornada_entrada = null;
         d.jornada_salida = null;
       }
+    }
 
-      legalSum += base;
-      extraSum += extra;
-      totalSum += totalHours;
+    const legalLimit = Math.min(WEEKLY_LEGAL_LIMIT, legalCapacitySum);
+    const extraLimit = Math.min(WEEKLY_EXTRA_LIMIT, extraCapacitySum);
+
+    if (payableExtraSum - extraLimit > 1e-6) {
+      return res.status(400).json({
+        message:
+          "Límite semanal de horas extra (12h) excedido. Reduce las horas extra antes de guardar.",
+      });
+    }
+
+    if (payableExtraSum > 0 && legalSum + 1e-6 < legalLimit) {
+      return res.status(400).json({
+        message:
+          "No puedes reducir horas legales mientras existan horas extra pendientes en la semana.",
+      });
     }
 
     const updatePayload = {

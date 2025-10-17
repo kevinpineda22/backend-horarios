@@ -143,8 +143,8 @@ export function getDayInfo(
     }
   }
 
-  const weekdayCapacity = wd === 6 ? 7 : 10;
-  const saturdayEndTime = "15:00";
+  const weekdayCapacity = wd === 6 ? 6 : 10;
+  const saturdayEndTime = "14:00";
   const weekdayEndTime = "18:00";
 
   const info = {
@@ -234,7 +234,7 @@ export function allocateHoursRandomly(dateISO, dayInfo, hoursNeeded) {
 // ========================
 export function getDailyCapacity(wd, isHoliday, holidayOverride) {
   if (isHoliday && holidayOverride === "work") return HOLIDAY_HOURS;
-  if (wd === 6) return 7;
+  if (wd === 6) return 6;
   if (wd >= 1 && wd <= 5) return 10;
   return 0;
 }
@@ -360,9 +360,9 @@ export function generateScheduleForRange56(
         extraLeft -= extraHours;
         day.jornada_reducida = true;
       } else if (isSaturday && !isReduced) {
-        // Sábado normal: 7 horas totales (4 legales + 3 extras)
+        // Sábado normal: 6 horas totales (4 legales + 2 extras)
         const baseHours = Math.min(4, legalLeft);
-        const extraHours = Math.min(3, extraLeft);
+        const extraHours = Math.min(2, extraLeft);
         totals.base = baseHours;
         totals.extra = extraHours;
         totals.total = baseHours + extraHours;
