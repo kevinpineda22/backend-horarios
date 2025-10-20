@@ -77,31 +77,27 @@ const WD_NAME = {
 };
 
 // ========================
-// Lógica de Capacidad (¡CON EXPORTS CORREGIDOS!)
+// Lógica de Capacidad
 // ========================
 
-// Capacidad Legal Máxima (Base para 'horas_base')
 export const getLegalCapForDay = (weekday) => {
     if (weekday === 6) return 4; // Sábado
     if (weekday >= 1 && weekday <= 5) return 8; // Lunes a Viernes
     return 0; // Domingo
 };
 
-// Capacidad Regular Total (Base para 'banco de horas')
 export const getRegularDailyCap = (weekday) => {
     if (weekday === 6) return 7; // Sábado: 7h
     if (weekday >= 1 && weekday <= 5) return 10; // L-V: 10h
     return 0; // Domingo
 };
 
-// Capacidad Extra Pagable Máxima (Extras que se pagan)
 export const getPayableExtraCapForDay = (weekday) => {
     if (weekday === 6) return 3; // Sábado: 3h (total 7h)
     if (weekday >= 1 && weekday <= 5) return 2; // L-V: 2h (total 10h)
     return 0;
 };
 
-// Capacidad Total por Defecto (para generación automática)
 export function getDailyCapacity(wd, isHoliday, holidayOverride) {
     if (isHoliday && holidayOverride === "work") return HOLIDAY_HOURS;
     if (wd === 6) return 7; // Sábado normal
@@ -299,7 +295,7 @@ export function generateScheduleForRange56(
 
             const wd = isoWeekday(d);
             const isSunday = wd === 7;
-            const isHoliday = holidaySet?.has?.(ymd) || false;
+            const isHoliday = holidaySet?.has?.(ymd) || false; // .has() es correcto para Map
             const holidayOverride = holidayOverrides[ymd];
             const sundayStatus = isSunday ? sundayOverrides[ymd] : null;
 
@@ -310,7 +306,6 @@ export function generateScheduleForRange56(
             } else if (workingWeekdays.includes(wd) || (isHoliday && holidayOverride === "work")) {
                 const dayCapacity = getDailyCapacity(wd, isHoliday, holidayOverride);
                 if (dayCapacity > 0) {
-                    // Obtener nombre del festivo del set
                     const holidayInfo = isHoliday ? (holidaySet.get(ymd) || { name: 'Festivo' }) : null;
                     workableDays.push({ date: d, ymd, wd, isHoliday, holidayName: holidayInfo?.name || null, override: holidayOverride, capacity: dayCapacity });
                 }
@@ -362,19 +357,23 @@ export function generateScheduleForRange56(
             const tipoReduccion = isReduced ? 'salir-temprano' : null;
 
             const dayInfo = getDayInfo(x.wd, x.isHoliday, x.override, isReduced, tipoReduccion);
+            // --- ¡AQUÍ ESTÁ LA CORRECCIÓN! ---
             const { blocks, entryTime, exitTime } = allocateHoursRandomly(x.ymd, dayInfo, totals.total);
 
             dias.push({
                 fecha: x.ymd, descripcion: WD_NAME[x.wd],
                 horas: totals.total, horas_base: totals.base, horas_extra: totals.extra,
-                bloques, jornada_entrada: entryTime || null, jornada_salida: exitTime || null,
+                bloques: blocks, // <-- Asignar 'blocks' (con 's') a la propiedad 'bloques'
+                jornada_entrada: entryTime || null, 
+                jornada_salida: exitTime || null,
                 domingo_estado: null,
                 jornada_reducida: isReduced,
                 tipo_jornada_reducida: tipoReduccion,
                 es_festivo: x.isHoliday || false,
                 festivo_trabajado: Boolean(x.isHoliday && x.override === "work"),
-                festivo_nombre: x.holidayName // Usar el nombre guardado
+                festivo_nombre: x.holidayName
             });
+            // --- FIN DE LA CORRECCIÓN ---
         }
 
         outWeeks.push({
