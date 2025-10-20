@@ -9,9 +9,9 @@ import {
     WEEKLY_TOTAL_LIMIT,
     getDayInfo,
     allocateHoursRandomly,
-    getLegalCapForDay, // <--- Añadida importación faltante
-    getRegularDailyCap, // <--- Añadida importación faltante
-    getPayableExtraCapForDay, // <--- Añadida importación faltante
+    getLegalCapForDay, // <-- Importación corregida
+    getRegularDailyCap, // <-- Importación corregida
+    getPayableExtraCapForDay, // <-- Importación corregida
 } from "../utils/schedule.js";
 import { getHolidaySet } from "../utils/holidays.js";
 import { format, parseISO, isValid, addDays } from "date-fns";
@@ -23,6 +23,7 @@ import {
     resetForSemana,
 } from "./hoursBankController.js";
 
+// --- Constantes y Helpers ---
 const toFixedNumber = (value) => Number(Number(value || 0).toFixed(2));
 const MAX_OVERTIME_PER_DAY = 4;
 
@@ -31,7 +32,6 @@ const BLOCKING_NOVEDADES = new Set([
     "Permisos", "Estudio", "Día de la Familia",
 ]);
 
-// Helper para parsear fechas YYYY-MM-DD a objetos Date (importante para comparaciones)
 const parseDateOnly = (value) => {
     if (!value) return null;
     if (value instanceof Date && !Number.isNaN(value.getTime())) {
@@ -46,10 +46,8 @@ const parseDateOnly = (value) => {
     return isValid(parsed) ? parsed : null;
 };
 
-// Helper para formatear Date a YYYY-MM-DD
 const toISODateString = (date) => format(date, "yyyy-MM-dd");
 
-// Helper para inferir fecha de fin de bloqueo
 const inferEndDate = (startDate, endCandidate, details) => {
     let inferred = parseDateOnly(endCandidate);
     if (!inferred || inferred < startDate) {
@@ -76,7 +74,6 @@ const inferEndDate = (startDate, endCandidate, details) => {
     return inferred;
 };
 
-// Helper para normalizar observaciones bloqueantes
 const normalizeBlockingObservation = (rawObs) => {
     if (!rawObs || !BLOCKING_NOVEDADES.has(rawObs.tipo_novedad)) return null;
     const details = rawObs.details && typeof rawObs.details === 'object' ? rawObs.details : {};
@@ -123,7 +120,6 @@ const normalizeBlockingObservation = (rawObs) => {
     };
 };
 
-// Helper para buscar observaciones bloqueantes en un rango
 const fetchBlockingObservationsInRange = async (empleadoId, startDate, endDate) => {
     const { data, error } = await supabaseAxios.get(
         `/observaciones?select=id,tipo_novedad,observacion,fecha_novedad,details&empleado_id=eq.${empleadoId}&order=fecha_novedad.desc`
@@ -135,14 +131,12 @@ const fetchBlockingObservationsInRange = async (empleadoId, startDate, endDate) 
         .filter(obs => obs.rawEnd >= startDate && obs.rawStart <= endDate);
 };
 
-// Helper para formatear observación para respuesta
 const serializeObservationForResponse = (obs) => ({
     id: obs.id, tipo: obs.tipo, observacion: obs.observacion,
     fecha_inicio: obs.start, fecha_fin: obs.end,
     rawStart: obs.rawStart, rawEnd: obs.rawEnd
 });
 
-// Helper para aplicar horas del banco
 const applyBankedHours = (weeks, bankEntries) => {
     if (!Array.isArray(weeks) || weeks.length === 0 || !Array.isArray(bankEntries) || bankEntries.length === 0) {
         return { bankUpdates: [], summaries: [] };
@@ -377,12 +371,12 @@ export const createHorario = async (req, res) => {
     }
 };
 
-// --- FUNCIÓN updateHorario CORREGIDA (de la respuesta anterior) ---
+// --- FUNCIÓN updateHorario CORREGIDA ---
 export const updateHorario = async (req, res) => {
     const { id } = req.params;
-    const { dias } = req.body; // 'dias' es el array actualizado que envía el frontend
+    const { dias } = req.body;
     try {
-        // 1. Obtener el horario actual para comparar
+        // 1. Obtener el horario actual
         const { data: [current], error: fetchError } = await supabaseAxios.get(
             `/horarios?select=id,empleado_id,fecha_inicio,fecha_fin,dias&id=eq.${id}`
         );
@@ -394,23 +388,22 @@ export const updateHorario = async (req, res) => {
             return res.status(400).json({ message: "El payload debe incluir 'dias' como un arreglo válido." });
         }
 
-        // 2. Validar fechas y parsear días actualizados
+        // 2. Validar fechas y parsear días
         const parsedDays = dias
             .map((day) => ({
-                ...day, // Mantener toda la info del día enviada (jornada_reducida, etc.)
+                ...day,
                 horas: Number(day.horas || 0),
-                parsedDate: parseDateOnly(day.fecha), // Convertir a objeto Date para comparaciones
+                parsedDate: parseDateOnly(day.fecha),
             }))
-            .filter((day) => day.parsedDate); // Filtrar días con fecha inválida
+            .filter((day) => day.parsedDate);
 
         if (!parsedDays.length || parsedDays.length !== dias.length) {
              return res.status(400).json({ message: "Todos los días deben incluir una fecha válida en formato YYYY-MM-DD." });
         }
 
-        // 3. Obtener rango de fechas y verificar bloqueos
+        // 3. Verificar bloqueos
         const minDate = parsedDays.reduce((acc, day) => (day.parsedDate < acc ? day.parsedDate : acc), parsedDays[0].parsedDate);
         const maxDate = parsedDays.reduce((acc, day) => (day.parsedDate > acc ? day.parsedDate : acc), parsedDays[0].parsedDate);
-
         const blockingObservations = await fetchBlockingObservationsInRange(current.empleado_id, minDate, maxDate);
 
         if (blockingObservations.length) {
@@ -418,7 +411,7 @@ export const updateHorario = async (req, res) => {
             for (const obs of blockingObservations) {
                 const conflictDays = parsedDays
                     .filter(day => day.horas > 0 && day.parsedDate >= obs.rawStart && day.parsedDate <= obs.rawEnd)
-                    .map(day => ({ fecha: day.fecha, horas: day.horas, descripcion: day.descripcion })); // Incluir descripción
+                    .map(day => ({ fecha: day.fecha, horas: day.horas, descripcion: day.descripcion }));
 
                 if (conflictDays.length) {
                     conflicts.push({
@@ -431,28 +424,24 @@ export const updateHorario = async (req, res) => {
                  const conflictDetails = conflicts.map(c => `<li>${c.tipo} (${format(c.rawStart, 'dd/MM')} - ${format(c.rawEnd, 'dd/MM')}) bloquea: ${c.dias_conflictivos.map(d => d.descripcion || d.fecha).join(', ')}</li>`).join('');
                 return res.status(409).json({
                     message: "Conflicto: No se pueden asignar horas a días bloqueados por novedades.",
-                    bloqueos: conflicts, // Enviar detalles para mostrar en frontend
+                    bloqueos: conflicts,
                     htmlMessage: `No se pueden guardar los cambios porque algunos días con horas asignadas ahora están bloqueados:<ul>${conflictDetails}</ul> Ajusta las horas a 0 para esos días.`
                 });
             }
         }
 
-        // 4. Preparar datos previos para cálculo de deltas del banco
+        // 4. Preparar datos previos para deltas del banco
         const previousDays = Array.isArray(current?.dias) ? current.dias : [];
-        const previousDayMap = new Map(previousDays.map(day => [day.fecha, day])); // Guardar objeto día completo
+        const previousDayMap = new Map(previousDays.map(day => [day.fecha, day]));
         const previousTotalHours = previousDays.reduce((sum, day) => sum + Number(day.horas || 0), 0);
-        const previousWeeklyExcess = Math.max(0, toFixedNumber(previousTotalHours - WEEKLY_TOTAL_LIMIT)); // Exceso > 56h
+        const previousWeeklyExcess = Math.max(0, toFixedNumber(previousTotalHours - WEEKLY_TOTAL_LIMIT));
 
         // 5. Recalcular horas base, extra, bloques y deltas del banco
         const updatedDiasRecalculated = [];
-        const allowOvertime = Boolean(req.body.allow_overtime); // Flag que indica si se permiten horas > capacidad regular
-        let legalSum = 0;
-        let payableExtraSum = 0;
-        let totalSum = 0;
-        let legalCapacitySum = 0;
-        let extraCapacitySum = 0;
-        let manualOvertimeDelta = 0; // Cambio neto en horas > capacidad regular
-        let manualOvertimeTotal = 0; // Total de horas > capacidad regular en la nueva versión
+        const allowOvertime = Boolean(req.body.allow_overtime);
+        let legalSum = 0, payableExtraSum = 0, totalSum = 0;
+        let legalCapacitySum = 0, extraCapacitySum = 0;
+        let manualOvertimeDelta = 0, manualOvertimeTotal = 0;
         const manualOvertimeDetails = [];
 
         for (const dayDataFromFrontend of parsedDays) {
@@ -460,7 +449,6 @@ export const updateHorario = async (req, res) => {
             const wd = isoWeekday(day.parsedDate);
             const totalHours = day.horas;
 
-             // --- CORRECCIÓN CLAVE: Usar getRegularDailyCap para base del banco y límite ---
              const regularCap = getRegularDailyCap(wd); // 10h L-V, 7h Sáb
              const overtimeLimit = regularCap + MAX_OVERTIME_PER_DAY; // 14h L-V, 11h Sáb
 
@@ -478,10 +466,8 @@ export const updateHorario = async (req, res) => {
                  if (deltaOver !== 0) {
                      manualOvertimeDelta = toFixedNumber(manualOvertimeDelta + deltaOver);
                      manualOvertimeDetails.push({
-                         fecha: day.fecha,
-                         limite_regular_diario: regularCap,
-                         horas_previas: toFixedNumber(previousHours),
-                         horas_nuevas: toFixedNumber(totalHours),
+                         fecha: day.fecha, limite_regular_diario: regularCap,
+                         horas_previas: toFixedNumber(previousHours), horas_nuevas: toFixedNumber(totalHours),
                          excedente_delta: deltaOver,
                      });
                  }
@@ -513,11 +499,8 @@ export const updateHorario = async (req, res) => {
                 day.jornada_entrada = entryTime;
                 day.jornada_salida = exitTime;
             } else {
-                day.horas_base = 0;
-                day.horas_extra = 0;
-                day.bloques = null;
-                day.jornada_entrada = null;
-                day.jornada_salida = null;
+                day.horas_base = 0; day.horas_extra = 0;
+                day.bloques = null; day.jornada_entrada = null; day.jornada_salida = null;
                 if (totalHours <= 0) {
                      day.horas_reducidas_manualmente = null;
                      day.horas_originales = null;
@@ -526,14 +509,14 @@ export const updateHorario = async (req, res) => {
 
             delete day.parsedDate;
             updatedDiasRecalculated.push(day);
-        } // Fin del bucle for (days)
+        }
 
         // 6. Validaciones semanales
         const legalLimit = Math.min(WEEKLY_LEGAL_LIMIT, legalCapacitySum);
         const extraLimit = Math.min(WEEKLY_EXTRA_LIMIT, extraCapacitySum);
 
         if (payableExtraSum - extraLimit > 1e-6) {
-            return res.status(400).json({ message: `Límite semanal de horas extra pagables (${extraLimit}h) excedido. Horas extra calculadas: ${payableExtraSum}h.` });
+            return res.status(400).json({ message: `Límite semanal de extras pagables (${extraLimit}h) excedido. Horas extra calculadas: ${payableExtraSum}h.` });
         }
         if (payableExtraSum > 0 && legalSum + 1e-6 < legalLimit) {
             return res.status(400).json({ message: "No puedes tener horas extra si no se cumplen las horas legales de la semana." });
@@ -543,7 +526,7 @@ export const updateHorario = async (req, res) => {
         const updatePayload = {
             dias: updatedDiasRecalculated,
             total_horas_semana: totalSum,
-            allow_overtime: allowOvertime, // Pasar el flag de si se detectó overtime
+            allow_overtime: allowOvertime,
         };
         const { error: updateError } = await supabaseAxios.patch(`/horarios?id=eq.${id}`, updatePayload);
         if (updateError) throw updateError;
@@ -561,14 +544,12 @@ export const updateHorario = async (req, res) => {
                 semanaFin: current.fecha_fin, horasExcedidas: weeklyExcesoDelta,
             });
         }
-
         if (manualOvertimeToRegister > 0) {
              await createOrUpdateExcess({
                  empleadoId: current.empleado_id, semanaInicio: current.fecha_inicio,
                  semanaFin: current.fecha_fin, horasExcedidas: manualOvertimeToRegister,
              });
         }
-
         if (weeklyExcesoTotal <= 0 && manualOvertimeTotalRounded <= 0) {
             await resetForSemana({
                 empleadoId: current.empleado_id,

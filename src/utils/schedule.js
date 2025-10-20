@@ -4,19 +4,19 @@ import {
     addWeeks,
     addDays as dfAddDays,
     format,
-    parseISO, // Importar parseISO
-    isValid,  // Importar isValid
+    parseISO,
+    isValid,
 } from "date-fns";
 
 // ========================
-// Constantes de negocio (Asegúrate que coincidan con horariosController)
+// Constantes de negocio
 // ========================
-const DAILY_LEGAL_LIMIT = 8; // L-V
+const DAILY_LEGAL_LIMIT = 8;
 const SATURDAY_LEGAL_LIMIT = 4;
 export const WEEKLY_LEGAL_LIMIT = 44;
-export const WEEKLY_EXTRA_LIMIT = 12; // Máximo extra pagable semanal
-export const WEEKLY_TOTAL_LIMIT = 56; // Límite legal total (44+12)
-const HOLIDAY_HOURS = 6; // Horas estándar para festivo trabajado
+export const WEEKLY_EXTRA_LIMIT = 12;
+export const WEEKLY_TOTAL_LIMIT = 56;
+const HOLIDAY_HOURS = 6;
 
 const BREAKFAST_MINUTES = 15;
 const LUNCH_MINUTES = 45;
@@ -26,50 +26,43 @@ const LUNCH_MINUTES = 45;
 // ========================
 const pad = (n) => String(n).padStart(2, '0');
 
-// Formatea Date a YYYY-MM-DD
 export const YMD = (d) => {
-    if (!d || !(d instanceof Date) || !isValid(d)) return null; // Validación
-    // Usar getUTC... para evitar problemas de zona horaria al formatear
+    if (!d || !(d instanceof Date) || !isValid(d)) return null;
     const year = d.getUTCFullYear();
     const month = pad(d.getUTCMonth() + 1);
     const day = pad(d.getUTCDate());
     return `${year}-${month}-${day}`;
 };
 
-// Añade días a una fecha (objeto Date o string YYYY-MM-DD)
 export const addDays = (d, n) => {
-    const date = (d instanceof Date) ? new Date(d) : parseISO(d + 'T00:00:00Z'); // Asegurar UTC
+    const date = (d instanceof Date) ? new Date(d) : parseISO(d + 'T00:00:00Z');
     if (!isValid(date)) return null;
-    date.setUTCDate(date.getUTCDate() + n); // Operar en UTC
+    date.setUTCDate(date.getUTCDate() + n);
     return date;
 };
 
-// Obtiene el inicio de la semana ISO (Lunes)
 export const startOfISOWeek = (d) => {
-    const date = (d instanceof Date) ? new Date(d) : parseISO(d + 'T00:00:00Z'); // Asegurar UTC
+    const date = (d instanceof Date) ? new Date(d) : parseISO(d + 'T00:00:00Z');
     if (!isValid(date)) return null;
-    return dfStartOfWeek(date, { weekStartsOn: 1 }); // weekStartsOn: 1 para Lunes
+    return dfStartOfWeek(date, { weekStartsOn: 1 });
 };
 
-// Obtiene el día de la semana ISO (1=Lunes, 7=Domingo)
 export const isoWeekday = (d) => {
-    const date = (d instanceof Date) ? d : parseISO(d + 'T00:00:00Z'); // Asegurar UTC
-    if (!isValid(date)) return 0; // Devolver 0 si es inválido
-    const wd = date.getUTCDay(); // 0 = Domingo, 1 = Lunes, ..., 6 = Sábado
-    return wd === 0 ? 7 : wd; // Convertir Domingo 0 a 7
+    const date = (d instanceof Date) ? d : parseISO(d + 'T00:00:00Z');
+    if (!isValid(date)) return 0;
+    const wd = date.getUTCDay();
+    return wd === 0 ? 7 : wd;
 };
 
-// Convierte HH:MM a minutos totales desde medianoche
 const hmToMinutes = (hhmm) => {
     if (typeof hhmm !== 'string') return 0;
     const [hh, mm] = hhmm.split(':').map(Number);
     return (hh || 0) * 60 + (mm || 0);
 };
 
-// Convierte minutos desde medianoche a HH:MM
 const minutesToHM = (m) => {
     if (typeof m !== 'number' || Number.isNaN(m) || m < 0) return '00:00';
-    const totalMinutes = Math.round(m); // Redondear minutos
+    const totalMinutes = Math.round(m);
     const hh = Math.floor(totalMinutes / 60);
     const mm = totalMinutes % 60;
     return `${pad(hh)}:${pad(mm)}`;
@@ -84,9 +77,42 @@ const WD_NAME = {
 };
 
 // ========================
+// Lógica de Capacidad (¡CON EXPORTS CORREGIDOS!)
+// ========================
+
+// Capacidad Legal Máxima (Base para 'horas_base')
+export const getLegalCapForDay = (weekday) => {
+    if (weekday === 6) return 4; // Sábado
+    if (weekday >= 1 && weekday <= 5) return 8; // Lunes a Viernes
+    return 0; // Domingo
+};
+
+// Capacidad Regular Total (Base para 'banco de horas')
+export const getRegularDailyCap = (weekday) => {
+    if (weekday === 6) return 7; // Sábado: 7h
+    if (weekday >= 1 && weekday <= 5) return 10; // L-V: 10h
+    return 0; // Domingo
+};
+
+// Capacidad Extra Pagable Máxima (Extras que se pagan)
+export const getPayableExtraCapForDay = (weekday) => {
+    if (weekday === 6) return 3; // Sábado: 3h (total 7h)
+    if (weekday >= 1 && weekday <= 5) return 2; // L-V: 2h (total 10h)
+    return 0;
+};
+
+// Capacidad Total por Defecto (para generación automática)
+export function getDailyCapacity(wd, isHoliday, holidayOverride) {
+    if (isHoliday && holidayOverride === "work") return HOLIDAY_HOURS;
+    if (wd === 6) return 7; // Sábado normal
+    if (wd >= 1 && wd <= 5) return 10; // L-V normal
+    return 0;
+}
+
+
+// ========================
 // Info de día (Segmentos y Descansos)
 // ========================
-// IMPORTANTE: Esta función define los TRAMOS horarios, no el total de horas.
 export function getDayInfo(
     wd, // ISO Weekday (1-7)
     isHoliday,
@@ -94,32 +120,24 @@ export function getDayInfo(
     isReduced = false,
     tipoJornadaReducida = "salir-temprano"
 ) {
-    // Caso: Festivo Trabajado
     if (isHoliday && holidayOverride === "work") {
         return {
-            // Capacidad total es 6h, pero los segmentos definen cómo se distribuyen
-            capacity: HOLIDAY_HOURS, // 6 horas
-            segments: [{ from: hmToMinutes("07:00"), to: hmToMinutes("13:00") }], // 7am - 1pm
-            breaks: [{ start: hmToMinutes("09:00"), duration: BREAKFAST_MINUTES }], // Descanso corto
+            capacity: HOLIDAY_HOURS,
+            segments: [{ from: hmToMinutes("07:00"), to: hmToMinutes("13:00") }],
+            breaks: [{ start: hmToMinutes("09:00"), duration: BREAKFAST_MINUTES }],
         };
     }
+    if (wd === 7) return { capacity: 0, segments: [], breaks: [] };
 
-    // Caso: Domingo (Sin trabajo por defecto)
-    if (wd === 7) {
-        return { capacity: 0, segments: [], breaks: [] };
-    }
-
-    // Caso: Sábado (wd = 6)
-    if (wd === 6) {
-        if (isReduced) {
-            // Sábado Reducido (6 horas totales)
+    if (wd === 6) { // Sábado
+        if (isReduced) { // Sábado Reducido (6h)
             if (tipoJornadaReducida === "entrar-tarde") {
                  return {
                     capacity: 6,
-                    segments: [ // 8am-9am (1h) + 9:15am-12pm (2.75h) + 12:45pm-3pm (2.25h) = 6h
+                    segments: [
                         { from: hmToMinutes("08:00"), to: hmToMinutes("09:00") },
                         { from: hmToMinutes("09:15"), to: hmToMinutes("12:00") },
-                        { from: hmToMinutes("12:45"), to: hmToMinutes("15:00") } // Salida normal sábado
+                        { from: hmToMinutes("12:45"), to: hmToMinutes("15:00") }
                     ],
                     breaks: [
                         { start: hmToMinutes("09:00"), duration: BREAKFAST_MINUTES },
@@ -129,10 +147,10 @@ export function getDayInfo(
             } else { // salir-temprano
                  return {
                     capacity: 6,
-                    segments: [ // 7am-9am (2h) + 9:15am-12pm (2.75h) + 12:45pm-2pm (1.25h) = 6h
+                    segments: [
                         { from: hmToMinutes("07:00"), to: hmToMinutes("09:00") },
                         { from: hmToMinutes("09:15"), to: hmToMinutes("12:00") },
-                        { from: hmToMinutes("12:45"), to: hmToMinutes("14:00") } // Sale 1h antes
+                        { from: hmToMinutes("12:45"), to: hmToMinutes("14:00") }
                     ],
                     breaks: [
                         { start: hmToMinutes("09:00"), duration: BREAKFAST_MINUTES },
@@ -140,14 +158,13 @@ export function getDayInfo(
                     ],
                 };
             }
-        } else {
-            // Sábado Normal (7 horas totales)
+        } else { // Sábado Normal (7h)
             return {
-                capacity: 7, // 7 horas
-                segments: [ // 7am-9am (2h) + 9:15am-12pm (2.75h) + 12:45pm-3pm (2.25h) = 7h
+                capacity: 7,
+                segments: [
                     { from: hmToMinutes("07:00"), to: hmToMinutes("09:00") },
                     { from: hmToMinutes("09:15"), to: hmToMinutes("12:00") },
-                    { from: hmToMinutes("12:45"), to: hmToMinutes("15:00") } // Salida 3pm
+                    { from: hmToMinutes("12:45"), to: hmToMinutes("15:00") }
                 ],
                 breaks: [
                     { start: hmToMinutes("09:00"), duration: BREAKFAST_MINUTES },
@@ -157,16 +174,15 @@ export function getDayInfo(
         }
     }
 
-    // Caso: Lunes a Viernes (wd = 1 a 5)
-    if (isReduced) {
-        // L-V Reducido (9 horas totales)
+    // Lunes a Viernes (wd = 1-5)
+    if (isReduced) { // L-V Reducido (9h)
         if (tipoJornadaReducida === "entrar-tarde") {
             return {
                 capacity: 9,
-                segments: [ // 8am-9am (1h) + 9:15am-12pm (2.75h) + 12:45pm-6pm (5.25h) = 9h
+                segments: [
                     { from: hmToMinutes("08:00"), to: hmToMinutes("09:00") },
                     { from: hmToMinutes("09:15"), to: hmToMinutes("12:00") },
-                    { from: hmToMinutes("12:45"), to: hmToMinutes("18:00") } // Salida normal 6pm
+                    { from: hmToMinutes("12:45"), to: hmToMinutes("18:00") }
                 ],
                 breaks: [
                     { start: hmToMinutes("09:00"), duration: BREAKFAST_MINUTES },
@@ -176,10 +192,10 @@ export function getDayInfo(
         } else { // salir-temprano
             return {
                 capacity: 9,
-                segments: [ // 7am-9am (2h) + 9:15am-12pm (2.75h) + 12:45pm-5pm (4.25h) = 9h
+                segments: [
                     { from: hmToMinutes("07:00"), to: hmToMinutes("09:00") },
                     { from: hmToMinutes("09:15"), to: hmToMinutes("12:00") },
-                    { from: hmToMinutes("12:45"), to: hmToMinutes("17:00") } // Sale 1h antes 5pm
+                    { from: hmToMinutes("12:45"), to: hmToMinutes("17:00") }
                 ],
                 breaks: [
                     { start: hmToMinutes("09:00"), duration: BREAKFAST_MINUTES },
@@ -187,14 +203,13 @@ export function getDayInfo(
                 ],
             };
         }
-    } else {
-        // L-V Normal (10 horas totales)
+    } else { // L-V Normal (10h)
         return {
             capacity: 10,
-            segments: [ // 7am-9am (2h) + 9:15am-12pm (2.75h) + 12:45pm-6pm (5.25h) = 10h
+            segments: [
                 { from: hmToMinutes("07:00"), to: hmToMinutes("09:00") },
                 { from: hmToMinutes("09:15"), to: hmToMinutes("12:00") },
-                { from: hmToMinutes("12:45"), to: hmToMinutes("18:00") } // Salida 6pm
+                { from: hmToMinutes("12:45"), to: hmToMinutes("18:00") }
             ],
             breaks: [
                 { start: hmToMinutes("09:00"), duration: BREAKFAST_MINUTES },
@@ -206,7 +221,7 @@ export function getDayInfo(
 
 
 // ========================
-// Asignación de horas en bloques (Sin cambios funcionales)
+// Asignación de horas en bloques
 // ========================
 export function allocateHoursRandomly(dateISO, dayInfo, hoursNeeded) {
     if (hoursNeeded <= 0) return { blocks: [], used: 0, entryTime: null, exitTime: null };
@@ -230,16 +245,11 @@ export function allocateHoursRandomly(dateISO, dayInfo, hoursNeeded) {
         remaining -= take;
     }
 
-    // Si faltaron horas por asignar (ej. se pidieron 11h pero los segmentos solo suman 10),
-    // se añaden al final del último bloque.
     if (rawBlocks.length > 0 && remaining > 0) {
         rawBlocks[rawBlocks.length - 1].endMinutes += remaining;
     } else if (rawBlocks.length === 0 && segments.length > 0) {
-         // Caso borde: Se pidieron horas pero no cupieron, o día sin segmentos válidos.
-         // Crear un bloque vacío al inicio del primer segmento disponible.
          rawBlocks.push({ startMinutes: segments[0].from, endMinutes: segments[0].from });
     } else if (rawBlocks.length === 0 && segments.length === 0) {
-         // Día sin segmentos (ej: Domingo), retornar vacío
          return { blocks: [], used: 0, entryTime: null, exitTime: null };
     }
 
@@ -253,54 +263,36 @@ export function allocateHoursRandomly(dateISO, dayInfo, hoursNeeded) {
     const entryTime = minutesToHM(rawBlocks[0].startMinutes);
     const exitTime = minutesToHM(rawBlocks[rawBlocks.length - 1].endMinutes);
 
-    return { blocks, used: requestedWorkMins / 60, entryTime, exitTime };
-}
-
-
-// ========================
-// Capacidad Diaria Total (Usada para definir horas default en generación)
-// ========================
-// Esta es diferente de getRegularDailyCap, porque incluye reducciones por defecto.
-export function getDailyCapacity(wd, isHoliday, holidayOverride) {
-    // Si es festivo trabajado -> 6h
-    if (isHoliday && holidayOverride === "work") return HOLIDAY_HOURS;
-    // Si es Sábado -> 7h (capacidad normal sábado)
-    if (wd === 6) return 7;
-    // Si es Lunes a Viernes -> 10h (capacidad normal L-V)
-    if (wd >= 1 && wd <= 5) return 10;
-    // Si es Domingo o festivo no trabajado -> 0h
-    return 0;
+    return { blocks, used: (requestedWorkMins - remaining) / 60, entryTime, exitTime };
 }
 
 // ========================
-// Generación semanal completa (Lógica actual, sin enfoque de 2 pasadas)
+// Generación semanal completa
 // ========================
 export function generateScheduleForRange56(
     fechaInicio, fechaFin, workingWeekdays, holidaySet,
     holidayOverrides = {}, sundayOverrides = {}
 ) {
     const outWeeks = [];
-    let cursor = startOfISOWeek(fechaInicio); // Asegura empezar en Lunes
-    const rangeStart = parseDateOnly(fechaInicio);
-    const rangeEnd = parseDateOnly(fechaFin);
+    let cursor = startOfISOWeek(fechaInicio);
+    const rangeStart = parseISO(fechaInicio + 'T00:00:00Z');
+    const rangeEnd = parseISO(fechaFin + 'T00:00:00Z');
 
-    if (!cursor || !rangeStart || !rangeEnd) {
+    if (!cursor || !isValid(rangeStart) || !isValid(rangeEnd)) {
         console.error("Fechas inválidas para generar horario:", fechaInicio, fechaFin);
-        return { schedule: [] }; // Devolver vacío si las fechas son inválidas
+        return { schedule: [] };
     }
-
 
     while (cursor <= rangeEnd) {
         const weekStart = new Date(cursor);
-        const weekEnd = addDays(weekStart, 6); // Lunes a Domingo
+        const weekEnd = addDays(weekStart, 6);
         const dias = [];
         const workableDays = [];
 
-        // 1. Identificar días laborables y domingos
         for (let i = 0; i < 7; i++) {
             const d = addDays(weekStart, i);
             const ymd = YMD(d);
-            if (!ymd || d < rangeStart || d > rangeEnd) continue; // Saltar si YMD es nulo o fuera de rango
+            if (!ymd || d < rangeStart || d > rangeEnd) continue;
 
             const wd = isoWeekday(d);
             const isSunday = wd === 7;
@@ -313,28 +305,25 @@ export function generateScheduleForRange56(
             if (isSunday) {
                 dias.push({ fecha: ymd, descripcion: WD_NAME[wd], domingo_estado: sundayStatus || null, horas: 0, horas_base: 0, horas_extra: 0, bloques: null, jornada_entrada: null, jornada_salida: null, jornada_reducida: false });
             } else if (workingWeekdays.includes(wd) || (isHoliday && holidayOverride === "work")) {
-                const dayCapacity = getDailyCapacity(wd, isHoliday, holidayOverride); // Capacidad TOTAL esperada
+                const dayCapacity = getDailyCapacity(wd, isHoliday, holidayOverride);
                 if (dayCapacity > 0) {
                     workableDays.push({ date: d, ymd, wd, isHoliday, override: holidayOverride, capacity: dayCapacity });
                 }
             }
         }
 
-        // 2. Determinar día reducido aleatorio
         const eligibleForReduction = workableDays.filter(d => d.wd >= 1 && d.wd <= 6 && !(d.isHoliday && d.override === 'work'));
         let reducedDayYmd = null;
         if (eligibleForReduction.length > 0) {
             const randomIndex = Math.floor(Math.random() * eligibleForReduction.length);
             reducedDayYmd = eligibleForReduction[randomIndex].ymd;
-             // Marcar el día elegido para usarlo después
              const chosenDay = workableDays.find(d => d.ymd === reducedDayYmd);
              if (chosenDay) chosenDay.jornada_reducida = true;
         }
 
-        // 3. Asignar horas día por día
         const dayTotals = new Map();
         let legalLeft = WEEKLY_LEGAL_LIMIT;
-        let extraLeft = WEEKLY_EXTRA_LIMIT; // Límite de extras *pagables*
+        let extraLeft = WEEKLY_EXTRA_LIMIT;
 
         for (const day of workableDays) {
             const totals = { base: 0, extra: 0, total: 0 };
@@ -342,62 +331,60 @@ export function generateScheduleForRange56(
             const isReduced = day.jornada_reducida || false;
             const isHolidayWorked = day.isHoliday && day.override === "work";
 
-            // Determinar horas objetivo para el día
             let targetTotalHours;
             if (isHolidayWorked) targetTotalHours = HOLIDAY_HOURS; // 6h
             else if (isSaturday) targetTotalHours = isReduced ? 6 : 7; // 6h o 7h
             else targetTotalHours = isReduced ? 9 : 10; // 9h o 10h
 
-            // Calcular horas base (legales)
-            const dayLegalCap = getLegalCapForDay(day.wd); // 8h L-V, 4h Sáb
+            const dayLegalCap = getLegalCapForDay(day.wd);
             const baseHours = Math.min(targetTotalHours, dayLegalCap, legalLeft);
             totals.base = baseHours;
             legalLeft -= baseHours;
 
-            // Calcular horas extra (pagables)
             const dayExtraPossible = Math.max(0, targetTotalHours - baseHours);
-            const dayPayableExtraCap = getPayableExtraCapForDay(day.wd); // 2h L-V, 3h Sáb
+            const dayPayableExtraCap = getPayableExtraCapForDay(day.wd);
             const extraHours = Math.min(dayExtraPossible, dayPayableExtraCap, extraLeft);
-            totals.extra = extraHours; // Estas son las extras pagables
+            totals.extra = extraHours;
             extraLeft -= extraHours;
 
-            // Calcular total final del día y guardar
-            totals.total = totals.base + totals.extra; // Total = Base + Extra Pagable (según esta lógica)
+            totals.total = totals.base + totals.extra;
             dayTotals.set(day.ymd, totals);
         }
+        
+        // (Lógica de redistribución de horas sobrantes omitida por simplicidad, como antes)
 
-        // 4. Generar objeto final para cada día trabajado
         for (const x of workableDays) {
             const totals = dayTotals.get(x.ymd) || { base: 0, extra: 0, total: 0 };
             const isReduced = x.jornada_reducida || false;
-            // El tipo de reducción lo asumimos 'salir-temprano' por defecto en la generación
             const tipoReduccion = isReduced ? 'salir-temprano' : null;
 
             const dayInfo = getDayInfo(x.wd, x.isHoliday, x.override, isReduced, tipoReduccion);
             const { blocks, entryTime, exitTime } = allocateHoursRandomly(x.ymd, dayInfo, totals.total);
 
+            // Buscar nombre del festivo en el Set (si existe)
+            const holidayInfo = isHoliday ? (holidaySet.get(x.ymd) || { name: 'Festivo' }) : null;
+
             dias.push({
                 fecha: x.ymd, descripcion: WD_NAME[x.wd],
-                horas: totals.total, horas_base: totals.base, horas_extra: totals.extra, // Guardar base y extra calculados
+                horas: totals.total, horas_base: totals.base, horas_extra: totals.extra,
                 bloques, jornada_entrada: entryTime || null, jornada_salida: exitTime || null,
-                domingo_estado: null, // Los domingos ya están
+                domingo_estado: null,
                 jornada_reducida: isReduced,
-                tipo_jornada_reducida: tipoReduccion, // Guardar el tipo usado
+                tipo_jornada_reducida: tipoReduccion,
                 es_festivo: x.isHoliday || false,
                 festivo_trabajado: Boolean(x.isHoliday && x.override === "work"),
-                festivo_nombre: x.isHoliday ? (holidaySet.get?.(x.ymd)?.name || 'Festivo') : null // Intentar obtener nombre
+                festivo_nombre: holidayInfo ? holidayInfo.name : null
             });
         }
 
-        // 5. Ensamblar semana
         outWeeks.push({
-            fecha_inicio: YMD(weekStart), // Usar YMD para asegurar formato
-            fecha_fin: YMD(weekEnd),     // Usar YMD para asegurar formato
+            fecha_inicio: YMD(weekStart),
+            fecha_fin: YMD(weekEnd),
             dias: dias.sort((a, b) => a.fecha.localeCompare(b.fecha)),
             total_horas_semana: dias.reduce((s, d) => s + (Number(d.horas) || 0), 0),
         });
 
-        cursor = addDays(weekStart, 7); // Avanzar al siguiente Lunes
+        cursor = addDays(weekStart, 7);
     }
 
     return { schedule: outWeeks };
