@@ -120,6 +120,9 @@ export function getDayInfo(
     isReduced = false,
     tipoJornadaReducida = "salir-temprano"
 ) {
+    const BREAKFAST_MINUTES = 15;
+    const LUNCH_MINUTES = 45;
+
     if (isHoliday && holidayOverride === "work") {
         return {
             capacity: HOLIDAY_HOURS,
@@ -307,7 +310,9 @@ export function generateScheduleForRange56(
             } else if (workingWeekdays.includes(wd) || (isHoliday && holidayOverride === "work")) {
                 const dayCapacity = getDailyCapacity(wd, isHoliday, holidayOverride);
                 if (dayCapacity > 0) {
-                    workableDays.push({ date: d, ymd, wd, isHoliday, override: holidayOverride, capacity: dayCapacity });
+                    // Obtener nombre del festivo del set
+                    const holidayInfo = isHoliday ? (holidaySet.get(ymd) || { name: 'Festivo' }) : null;
+                    workableDays.push({ date: d, ymd, wd, isHoliday, holidayName: holidayInfo?.name || null, override: holidayOverride, capacity: dayCapacity });
                 }
             }
         }
@@ -350,8 +355,6 @@ export function generateScheduleForRange56(
             totals.total = totals.base + totals.extra;
             dayTotals.set(day.ymd, totals);
         }
-        
-        // (Lógica de redistribución de horas sobrantes omitida por simplicidad, como antes)
 
         for (const x of workableDays) {
             const totals = dayTotals.get(x.ymd) || { base: 0, extra: 0, total: 0 };
@@ -360,9 +363,6 @@ export function generateScheduleForRange56(
 
             const dayInfo = getDayInfo(x.wd, x.isHoliday, x.override, isReduced, tipoReduccion);
             const { blocks, entryTime, exitTime } = allocateHoursRandomly(x.ymd, dayInfo, totals.total);
-
-            // Buscar nombre del festivo en el Set (si existe)
-            const holidayInfo = isHoliday ? (holidaySet.get(x.ymd) || { name: 'Festivo' }) : null;
 
             dias.push({
                 fecha: x.ymd, descripcion: WD_NAME[x.wd],
@@ -373,7 +373,7 @@ export function generateScheduleForRange56(
                 tipo_jornada_reducida: tipoReduccion,
                 es_festivo: x.isHoliday || false,
                 festivo_trabajado: Boolean(x.isHoliday && x.override === "work"),
-                festivo_nombre: holidayInfo ? holidayInfo.name : null
+                festivo_nombre: x.holidayName // Usar el nombre guardado
             });
         }
 

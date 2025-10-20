@@ -9,9 +9,9 @@ import {
     WEEKLY_TOTAL_LIMIT,
     getDayInfo,
     allocateHoursRandomly,
-    getLegalCapForDay, // <-- Importación corregida
-    getRegularDailyCap, // <-- Importación corregida
-    getPayableExtraCapForDay, // <-- Importación corregida
+    getLegalCapForDay, // <-- Importación correcta
+    getRegularDailyCap, // <-- Importación correcta
+    getPayableExtraCapForDay, // <-- Importación correcta
 } from "../utils/schedule.js";
 import { getHolidaySet } from "../utils/holidays.js";
 import { format, parseISO, isValid, addDays } from "date-fns";
@@ -449,8 +449,8 @@ export const updateHorario = async (req, res) => {
             const wd = isoWeekday(day.parsedDate);
             const totalHours = day.horas;
 
-             const regularCap = getRegularDailyCap(wd); // 10h L-V, 7h Sáb
-             const overtimeLimit = regularCap + MAX_OVERTIME_PER_DAY; // 14h L-V, 11h Sáb
+             const regularCap = getRegularDailyCap(wd);
+             const overtimeLimit = regularCap + MAX_OVERTIME_PER_DAY;
 
             if (totalHours > overtimeLimit + 1e-6) {
                 return res.status(400).json({ message: `Límite diario (${overtimeLimit}h) excedido en ${day.fecha}` });
@@ -532,7 +532,7 @@ export const updateHorario = async (req, res) => {
         if (updateError) throw updateError;
 
         // 8. Actualizar (o resetear) registro en el banco de horas
-        const weeklyExcesoTotal = Math.max(0, toFixedNumber(totalSum - (WEEKLY_LEGAL_LIMIT + WEEKLY_EXTRA_LIMIT))); // Exceso > 56h
+        const weeklyExcesoTotal = Math.max(0, toFixedNumber(totalSum - (WEEKLY_LEGAL_LIMIT + WEEKLY_EXTRA_LIMIT)));
         const weeklyExcesoDelta = toFixedNumber(weeklyExcesoTotal - previousWeeklyExcess);
         const manualOvertimeDeltaNeto = toFixedNumber(manualOvertimeDelta);
         const manualOvertimeTotalRounded = toFixedNumber(manualOvertimeTotal);
