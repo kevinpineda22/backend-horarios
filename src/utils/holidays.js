@@ -18,8 +18,8 @@ const parseDateOnlyUTC = (value) => {
 };
 
 export function getHolidaySet(startISO, endISO) { // Devuelve un Map
-    const start = parseDateOnlyUTC(startISO);
-    const end = parseDateOnlyUTC(endISO);
+    const start = parseDateOnlyUTC(startISO); // <--- Variable 'start'
+    const end = parseDateOnlyUTC(endISO);     // <--- Variable 'end'
     
     if (!start || !end) {
         console.error("Fechas inválidas para getHolidaySet", startISO, endISO);
@@ -32,17 +32,18 @@ export function getHolidaySet(startISO, endISO) { // Devuelve un Map
         hd.setLanguages("es");
     }
 
-    const map = new Map(); // <--- CAMBIO: de Set a Map
+    const map = new Map();
     for (const y of years) {
         const list = hd.getHolidays(y) || [];
         for (const h of list) {
             const ymd = h.date.slice(0, 10);
             const d = parseDateOnlyUTC(ymd);
-            if (d && d >= s && d <= e) {
-                // Guardar el objeto festivo completo (incluye h.name)
-                map.set(ymd, h); // <--- CAMBIO
+            
+            // --- ¡AQUÍ ESTÁ LA LÍNEA CORREGIDA! ---
+            if (d && d >= start && d <= end) { // <-- Usar 'start' y 'end'
+                map.set(ymd, h);
             }
         }
     }
-    return map; // <--- CAMBIO
+    return map;
 }
