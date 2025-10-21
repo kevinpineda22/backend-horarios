@@ -77,27 +77,31 @@ const WD_NAME = {
 };
 
 // ========================
-// Lógica de Capacidad
+// Lógica de Capacidad (¡CON EXPORTS CORREGIDOS!)
 // ========================
 
+// Capacidad Legal Máxima (Base para 'horas_base')
 export const getLegalCapForDay = (weekday) => {
     if (weekday === 6) return 4; // Sábado
     if (weekday >= 1 && weekday <= 5) return 8; // Lunes a Viernes
     return 0; // Domingo
 };
 
+// Capacidad Regular Total (Base para 'banco de horas')
 export const getRegularDailyCap = (weekday) => {
     if (weekday === 6) return 7; // Sábado: 7h
     if (weekday >= 1 && weekday <= 5) return 10; // L-V: 10h
     return 0; // Domingo
 };
 
+// Capacidad Extra Pagable Máxima (Extras que se pagan)
 export const getPayableExtraCapForDay = (weekday) => {
     if (weekday === 6) return 3; // Sábado: 3h (total 7h)
     if (weekday >= 1 && weekday <= 5) return 2; // L-V: 2h (total 10h)
     return 0;
 };
 
+// Capacidad Total por Defecto (para generación automática)
 export function getDailyCapacity(wd, isHoliday, holidayOverride) {
     if (isHoliday && holidayOverride === "work") return HOLIDAY_HOURS;
     if (wd === 6) return 7; // Sábado normal
@@ -295,7 +299,7 @@ export function generateScheduleForRange56(
 
             const wd = isoWeekday(d);
             const isSunday = wd === 7;
-            const isHoliday = holidaySet?.has?.(ymd) || false; // .has() es correcto para Map
+            const isHoliday = holidaySet?.has?.(ymd); // .has() es correcto para Map
             const holidayOverride = holidayOverrides[ymd];
             const sundayStatus = isSunday ? sundayOverrides[ymd] : null;
 
