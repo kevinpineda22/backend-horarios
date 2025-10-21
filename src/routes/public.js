@@ -3,20 +3,18 @@ import express from "express";
 import axios from "axios";
 import dotenv from "dotenv";
 import Holidays from "date-holidays";
-import { parseISO, isValid } from "date-fns"; // Importar para parsear fechas
+import { parseISO, isValid } from "date-fns";
 dotenv.config();
 
 const router = express.Router();
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_KEY;
 
-// Cliente de Axios para Supabase
 const client = axios.create({
     baseURL: `${supabaseUrl}/rest/v1`,
     headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
 });
 
-// Helper para parsear fechas (usado en getHolidaySet)
 const parseDateOnlyUTC = (value) => {
     if (!value) return null;
     if (value instanceof Date && isValid(value)) {
@@ -57,7 +55,7 @@ router.get("/festivos", (req, res) => {
             const list = hd.getHolidays(y) || [];
             for (const h of list) {
                 const ymd = h.date.slice(0, 10);
-                const d = parseDateOnlyUTC(ymd); // Usar parser UTC
+                const d = parseDateOnlyUTC(ymd);
                 if (d && d >= s && d <= e) {
                     out.push({
                         fecha: ymd,
@@ -99,29 +97,29 @@ router.post("/consulta-horarios", async (req, res) => {
         }
 
         // 2. Obtener horarios públicos (activos)
-        // Usamos 'select=*' para asegurar que traemos *todos* los campos del JSON 'dias'
         const { data: horariosData, error: horariosError } = await client.get(
             `/horarios?empleado_id=eq.${empleado.id}&estado_visibilidad=eq.publico&select=*&order=fecha_inicio.desc`
         );
         if (horariosError) throw horariosError;
 
-        // --- ¡NUEVO! ---
-        // 3. Obtener las observaciones (bloqueos)
-        // Necesitamos las fechas y tipos para saber por qué un día no se trabaja
+        // --- ¡LÍNEA CORREGIDA! ---
+        // 3. Obtener las observaciones (solo las columnas que existen)
         const { data: observacionesData, error: obsError } = await client.get(
-             `/observaciones?empleado_id=eq.${empleado.id}&select=id,tipo_novedad,observacion,details,fecha_novedad,fecha_inicio,fecha_fin`
+             `/observaciones?empleado_id=eq.${empleado.id}&select=id,tipo_novedad,observacion,details,fecha_novedad`
         );
+        // --- FIN DE LA CORRECCIÓN ---
+        
         if (obsError) throw obsError;
-        // --- FIN NUEVO ---
 
         // 4. Devolver empleado, horarios Y observaciones
         res.json({ 
             empleado, 
             horarios: horariosData || [],
-            observaciones: observacionesData || [] // <-- AÑADIDO
+            observaciones: observacionesData || []
         });
 
     } catch (e) {
+        // Imprimir el error de Supabase/Axios si existe
         console.error("Error en la consulta pública de horarios:", e.response ? e.response.data : e.message);
         res.status(500).json({ message: "Error en la consulta. Intenta de nuevo más tarde." });
     }
