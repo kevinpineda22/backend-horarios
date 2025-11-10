@@ -340,6 +340,7 @@ export const createHorario = async (req, res) => {
       sunday_overrides,
       apply_banked_hours = false,
       bank_entry_ids = [],
+      creado_por,
     } = req.body;
 
     if (!Array.isArray(working_weekdays) || working_weekdays.length === 0) {
@@ -393,11 +394,17 @@ export const createHorario = async (req, res) => {
 
     await archivarHorariosPorEmpleado(empleado_id);
 
+    const creatorValue =
+      typeof creado_por === "string" && creado_por.trim().length > 0
+        ? creado_por.trim()
+        : null;
+
     const payloadSemanales = horariosSemanales.map((h) => ({
       ...h,
       empleado_id,
       tipo: "semanal",
       estado_visibilidad: "publico",
+      creado_por: creatorValue,
     }));
     const { data: dataSemanales, error: errorSemanales } =
       await supabaseAxios.post("/horarios", payloadSemanales, {
@@ -474,13 +481,11 @@ export const createHorario = async (req, res) => {
     });
   } catch (e) {
     console.error("Error detallado en createHorario:", e);
-    res
-      .status(500)
-      .json({
-        message: "Error creating horario",
-        error: e.message,
-        stack: e.stack,
-      });
+    res.status(500).json({
+      message: "Error creating horario",
+      error: e.message,
+      stack: e.stack,
+    });
   }
 };
 
@@ -501,11 +506,9 @@ export const updateHorario = async (req, res) => {
       return res.status(404).json({ message: "Horario no encontrado" });
     }
     if (!Array.isArray(dias) || dias.length === 0) {
-      return res
-        .status(400)
-        .json({
-          message: "El payload debe incluir 'dias' como un arreglo válido.",
-        });
+      return res.status(400).json({
+        message: "El payload debe incluir 'dias' como un arreglo válido.",
+      });
     }
 
     // 2. Validar fechas y parsear días
@@ -518,12 +521,10 @@ export const updateHorario = async (req, res) => {
       .filter((day) => day.parsedDate);
 
     if (!parsedDays.length || parsedDays.length !== dias.length) {
-      return res
-        .status(400)
-        .json({
-          message:
-            "Todos los días deben incluir una fecha válida en formato YYYY-MM-DD.",
-        });
+      return res.status(400).json({
+        message:
+          "Todos los días deben incluir una fecha válida en formato YYYY-MM-DD.",
+      });
     }
 
     // 3. Verificar bloqueos
@@ -620,11 +621,9 @@ export const updateHorario = async (req, res) => {
       const overtimeLimit = regularCap + MAX_OVERTIME_PER_DAY;
 
       if (totalHours > overtimeLimit + 1e-6) {
-        return res
-          .status(400)
-          .json({
-            message: `Límite diario (${overtimeLimit}h) excedido en ${day.fecha}`,
-          });
+        return res.status(400).json({
+          message: `Límite diario (${overtimeLimit}h) excedido en ${day.fecha}`,
+        });
       }
 
       if (regularCap > 0) {
@@ -710,19 +709,15 @@ export const updateHorario = async (req, res) => {
     const extraLimit = Math.min(WEEKLY_EXTRA_LIMIT, extraCapacitySum);
 
     if (payableExtraSum - extraLimit > 1e-6) {
-      return res
-        .status(400)
-        .json({
-          message: `Límite semanal de extras pagables (${extraLimit}h) excedido. Horas extra calculadas: ${payableExtraSum}h.`,
-        });
+      return res.status(400).json({
+        message: `Límite semanal de extras pagables (${extraLimit}h) excedido. Horas extra calculadas: ${payableExtraSum}h.`,
+      });
     }
     if (payableExtraSum > 0 && legalSum + 1e-6 < legalLimit) {
-      return res
-        .status(400)
-        .json({
-          message:
-            "No puedes tener horas extra si no se cumplen las horas legales de la semana.",
-        });
+      return res.status(400).json({
+        message:
+          "No puedes tener horas extra si no se cumplen las horas legales de la semana.",
+      });
     }
 
     // 7. Preparar payload final y actualizar horario
@@ -812,12 +807,10 @@ export const deleteHorario = async (req, res) => {
     res.json({ message: "Horario eliminado correctamente" });
   } catch (e) {
     console.error("Error eliminando horario:", e);
-    res
-      .status(500)
-      .json({
-        message: "Error al eliminar el horario",
-        error: e.response?.data?.message || e.message,
-      });
+    res.status(500).json({
+      message: "Error al eliminar el horario",
+      error: e.response?.data?.message || e.message,
+    });
   }
 };
 
