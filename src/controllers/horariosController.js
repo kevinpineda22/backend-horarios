@@ -141,6 +141,7 @@ const normalizeBlockingObservation = (rawObs) => {
     end: toISODateString(endDate),
     rawStart: startDate,
     rawEnd: endDate,
+    details: details,
   };
 };
 
@@ -360,12 +361,34 @@ export const createHorario = async (req, res) => {
       scheduleStart,
       scheduleEnd
     );
-    if (blockingObservations.length) {
+
+    const realBlockers = blockingObservations.filter((obs) => {
+      if (
+        obs.tipo === "Estudio" &&
+        obs.details &&
+        obs.details.dias_estudio &&
+        obs.details.dias_estudio.length > 0
+      ) {
+        return false;
+      }
+      return true;
+    });
+
+    if (realBlockers.length) {
       return res.status(409).json({
         message: "Conflicto: Periodo bloqueado por novedades existentes.",
-        bloqueos: blockingObservations.map(serializeObservationForResponse),
+        bloqueos: realBlockers.map(serializeObservationForResponse),
       });
     }
+
+    const partialObservations = blockingObservations.filter((obs) => {
+      return (
+        obs.tipo === "Estudio" &&
+        obs.details &&
+        obs.details.dias_estudio &&
+        obs.details.dias_estudio.length > 0
+      );
+    });
 
     const holidaySet = getHolidaySet(fecha_inicio, fecha_fin);
     const { schedule: horariosSemanales } = generateScheduleForRange56(
@@ -374,7 +397,8 @@ export const createHorario = async (req, res) => {
       working_weekdays,
       holidaySet,
       holiday_overrides || {},
-      sunday_overrides || {}
+      sunday_overrides || {},
+      partialObservations
     );
 
     let bankUpdates = [];
