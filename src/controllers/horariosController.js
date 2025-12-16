@@ -583,8 +583,13 @@ export const updateHorario = async (req, res) => {
     );
 
     if (blockingObservations.length) {
+      // FILTRO: Ignorar bloqueos de tipo "Estudio" ya que son parciales y permiten horas
+      const realBlockers = blockingObservations.filter(
+        (obs) => obs.tipo !== "Estudio"
+      );
+
       const conflicts = [];
-      for (const obs of blockingObservations) {
+      for (const obs of realBlockers) {
         const conflictDays = parsedDays
           .filter(
             (day) =>

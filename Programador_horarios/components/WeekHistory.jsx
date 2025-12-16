@@ -23,6 +23,7 @@ import {
   formatHours,
   getSundayStatusForWeek,
   isoWeekdayFromYMD,
+  hmToMinutes,
 } from "../utils/programadorHorariosUtils"; // Ajusta la ruta a tus utils
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
@@ -125,17 +126,32 @@ const WeekHistory = ({
       const isReduced = day.descripcion === reducedDay;
       const iso = isoWeekdayFromYMD(day.fecha);
 
+      // Calcular horas de estudio para este día
+      const blockingForDay = getBlocksForDate(day.fecha);
+      let studyHours = 0;
+      blockingForDay.forEach((b) => {
+        if (b.tipo === "Estudio" && b.range) {
+          const [startStr, endStr] = b.range.split(" - ");
+          if (startStr && endStr) {
+            const mins = hmToMinutes(endStr) - hmToMinutes(startStr);
+            studyHours += Math.max(0, mins / 60);
+          }
+        }
+      });
+
       if (manual) {
         day.horas = manual.horas_reducidas;
         day.horas_reducidas_manualmente = true;
         day.horas_originales = manual.horas_originales;
       } else if (isReduced) {
-        day.horas = iso === 6 ? 6 : 9; // Aplicar reducción programada
+        const baseReduced = iso === 6 ? 6 : 9;
+        day.horas = Math.max(0, baseReduced - studyHours); // Aplicar reducción programada MENOS estudio
         day.horas_reducidas_manualmente = false; // Quitar marca manual
         day.horas_originales = null;
       } else {
         // Volver al default si no hay ajuste manual ni reducción programada
-        day.horas = iso === 7 ? 0 : iso === 6 ? 7 : 10; // Lógica de horas default
+        const baseNormal = iso === 7 ? 0 : iso === 6 ? 7 : 10;
+        day.horas = Math.max(0, baseNormal - studyHours); // Lógica de horas default MENOS estudio
         day.horas_reducidas_manualmente = false;
         day.horas_originales = null;
       }
@@ -144,7 +160,7 @@ const WeekHistory = ({
 
     // Usar los días modificados temporalmente para calcular los nuevos totales
     return computeWeekSums(tempWeek);
-  }, [week, isEditing, manualReductions, reducedDay]);
+  }, [week, isEditing, manualReductions, reducedDay, blockingDatesMap]);
 
   const { base, extra, total, bank, reduction } = weeklyData;
   const partialInfo = describePartialReasons(week); // Basado en datos originales
