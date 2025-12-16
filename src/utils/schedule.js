@@ -402,9 +402,18 @@ export function generateScheduleForRange56(
         for (const obs of partialObservations) {
           if (day.ymd >= obs.start && day.ymd <= obs.end) {
             if (obs.details && obs.details.dias_estudio) {
-              const dayConfig = obs.details.dias_estudio.find(
-                (d) => d.dia === day.wd
+              // Try to find by specific date (new format)
+              let dayConfig = obs.details.dias_estudio.find(
+                (d) => d.fecha === day.ymd
               );
+
+              // If not found, try to find by weekday (old format)
+              if (!dayConfig) {
+                dayConfig = obs.details.dias_estudio.find(
+                  (d) => d.dia === day.wd
+                );
+              }
+
               if (dayConfig && dayConfig.inicio && dayConfig.fin) {
                 const startMins = hmToMinutes(dayConfig.inicio);
                 const endMins = hmToMinutes(dayConfig.fin);
