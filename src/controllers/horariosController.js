@@ -105,7 +105,6 @@ const normalizeBlockingObservation = (rawObs) => {
       endCandidate = details.fecha_fin || details.fecha_inicio;
       break;
     case "Permisos":
-    case "Estudio":
     case "Día de la Familia":
       startCandidate =
         details.fecha_inicio ||
@@ -122,6 +121,23 @@ const normalizeBlockingObservation = (rawObs) => {
           ? details.fecha_propuesta_dia_familia
           : null) ||
         rawObs.fecha_novedad;
+      break;
+    case "Estudio":
+      if (
+        details.dias_estudio &&
+        Array.isArray(details.dias_estudio) &&
+        details.dias_estudio.length > 0
+      ) {
+        const sorted = [...details.dias_estudio].sort((a, b) =>
+          a.fecha.localeCompare(b.fecha)
+        );
+        startCandidate = sorted[0].fecha;
+        endCandidate = sorted[sorted.length - 1].fecha;
+      } else {
+        startCandidate = details.fecha_inicio || rawObs.fecha_novedad;
+        endCandidate =
+          details.fecha_fin || details.fecha_inicio || rawObs.fecha_novedad;
+      }
       break;
     default:
       startCandidate = rawObs.fecha_novedad;
