@@ -7,8 +7,7 @@ import {
   FaHistory,
   FaArrowLeft,
 } from "react-icons/fa";
-import { ToastContainer } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
+import { Toaster } from "react-hot-toast";
 import ProgramadorHorarios from "./ProgramadorHorarios";
 import Observaciones from "./ObservacionesPH";
 import GestionEmpleados from "./GestionEmpleados";
@@ -29,7 +28,7 @@ const AdminProgramadorHorarios = () => {
 
   return (
     <div className="admin-sch-main-container">
-      <ToastContainer position="top-center" autoClose={4000} />
+      <Toaster position="top-center" reverseOrder={false} />
 
       <motion.div
         initial={{ x: -250 }}

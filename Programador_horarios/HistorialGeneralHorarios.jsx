@@ -21,7 +21,7 @@ import {
   FaCalendarAlt,
   FaFilter,
 } from "react-icons/fa";
-import { toast } from "react-toastify";
+import { toast } from "react-hot-toast";
 import { api } from "../../services/apiHorarios";
 import { supabase } from "../../supabaseClient";
 import { Worker, Viewer } from "@react-pdf-viewer/core";
@@ -29,7 +29,7 @@ import { defaultLayoutPlugin } from "@react-pdf-viewer/default-layout";
 import "@react-pdf-viewer/core/lib/styles/index.css";
 import "@react-pdf-viewer/default-layout/lib/styles/index.css";
 import "./HistorialGeneralHorarios.css";
-import Swal from "sweetalert2";
+import Swal from "./utils/swalCustom";
 
 const isPdfUrl = (url = "") => url.toLowerCase().endsWith(".pdf");
 const isImageUrl = (url = "") => /\.(png|jpg|jpeg|webp|gif)$/i.test(url);

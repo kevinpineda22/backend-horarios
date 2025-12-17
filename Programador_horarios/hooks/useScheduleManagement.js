@@ -1,7 +1,7 @@
 // src/hooks/useScheduleManagement.js
 import { useState, useCallback } from "react";
-import { toast } from "react-toastify";
-import Swal from "sweetalert2";
+import { toast } from "react-hot-toast";
+import Swal from "../utils/swalCustom";
 import { format, eachDayOfInterval, getDay } from "date-fns";
 // ¡IMPORTANTE! Asegúrate de importar 'api' (además de 'apiPublic')
 import { api, apiPublic } from "../../../services/apiHorarios"; // Ajusta la ruta a tus servicios

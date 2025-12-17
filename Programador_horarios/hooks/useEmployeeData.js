@@ -1,6 +1,6 @@
 // src/hooks/useEmployeeData.js
 import { useState, useEffect, useCallback } from "react";
-import { toast } from "react-toastify";
+import { toast } from "react-hot-toast";
 import { api } from "../../../services/apiHorarios"; // Asegúrate que la ruta a 'services' sea correcta
 
 export function useEmployeeData(autoSelectFirst = false) {

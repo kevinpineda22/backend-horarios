@@ -1,6 +1,6 @@
 // src/hooks/useScheduleAndBlockingData.js
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { toast } from "react-toastify";
+import { toast } from "react-hot-toast";
 import { format, parseISO, addDays } from "date-fns";
 import { api } from "../../../services/apiHorarios"; // Ajusta la ruta a tu servicio API
 import {

@@ -1,7 +1,7 @@
 // src/hooks/useScheduleEditing.js
 import { useState, useCallback } from "react";
-import { toast } from "react-toastify";
-import Swal from "sweetalert2";
+import { toast } from "react-hot-toast";
+import Swal from "../utils/swalCustom";
 import { api } from "../../../services/apiHorarios"; // Ajusta la ruta
 import {
   isoWeekdayFromYMD,

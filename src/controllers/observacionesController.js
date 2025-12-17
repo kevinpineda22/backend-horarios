@@ -2,10 +2,19 @@ import { supabaseAxios, storageClient } from "../services/supabaseAxios.js";
 import { Buffer } from "buffer";
 import { sendEmail } from "../services/emailService.js";
 
-const NOTIFICATION_EMAILS = [
+const NOTIFICATION_EMAILS_SST = [
   "johanmerkahorro777@gmail.com",
   "juanmerkahorro@gmail.com",
 ];
+
+const NOTIFICATION_EMAILS_GENERAL = ["johansanchezvalencia@gmail.com"];
+
+const getRecipients = (tipo) => {
+  if (tipo === "Incapacidades" || tipo === "Restricciones/Recomendaciones") {
+    return NOTIFICATION_EMAILS_SST;
+  }
+  return NOTIFICATION_EMAILS_GENERAL;
+};
 
 const uploadFileAndGetUrl = async (
   base64,
@@ -275,20 +284,20 @@ export const createObservacion = async (req, res) => {
     );
     if (error) throw error;
 
-    // 3. Lógica de Notificación por Correo
-    if (shouldNotify) {
-      try {
-        const empleadoRes = await supabaseAxios.get(
-          `/empleados?select=nombre_completo,cedula&id=eq.${empleado_id}`
-        );
-        const empleado = empleadoRes.data?.[0] || {
-          nombre_completo: "Empleado Desconocido",
-          cedula: "N/A",
-        };
+    // 3. Lógica de Notificación por Correo (Siempre notifica, destinatario depende del tipo)
+    try {
+      const empleadoRes = await supabaseAxios.get(
+        `/empleados?select=nombre_completo,cedula&id=eq.${empleado_id}`
+      );
+      const empleado = empleadoRes.data?.[0] || {
+        nombre_completo: "Empleado Desconocido",
+        cedula: "N/A",
+      };
 
-        const subject = `[ALERTA] Nueva Novedad: ${tipo_novedad} para ${empleado.nombre_completo}`;
-        const systemUrl = "https://merkahorro.com/programador-horarios";
-        const htmlContent = `
+      const recipients = getRecipients(tipo_novedad);
+      const subject = `[ALERTA] Nueva Novedad: ${tipo_novedad} para ${empleado.nombre_completo}`;
+      const systemUrl = "https://merkahorro.com/programador-horarios";
+      const htmlContent = `
                     <!DOCTYPE html>
                     <html lang="es">
                     <head>
@@ -328,13 +337,12 @@ export const createObservacion = async (req, res) => {
                     </body>
                     </html>
                 `;
-        await sendEmail(NOTIFICATION_EMAILS.join(","), subject, htmlContent);
-      } catch (emailError) {
-        console.error(
-          "Error al enviar email de notificación (creación):",
-          emailError
-        );
-      }
+      await sendEmail(recipients.join(","), subject, htmlContent);
+    } catch (emailError) {
+      console.error(
+        "Error al enviar email de notificación (creación):",
+        emailError
+      );
     }
 
     res.status(201).json(data[0]);
@@ -509,12 +517,12 @@ export const updateObservacion = async (req, res) => {
     );
     if (error) throw error;
 
-    // 3. Lógica de Notificación por Correo
-    if (shouldNotify) {
-      try {
-        const subject = `[ACTUALIZACIÓN] Novedad: ${tipo_novedad} (ID: ${id})`;
-        const systemUrl = "https://merkahorro.com/programador-horarios";
-        const htmlContent = `
+    // 3. Lógica de Notificación por Correo (Siempre notifica, destinatario depende del tipo)
+    try {
+      const recipients = getRecipients(tipo_novedad);
+      const subject = `[ACTUALIZACIÓN] Novedad: ${tipo_novedad} (ID: ${id})`;
+      const systemUrl = "https://merkahorro.com/programador-horarios";
+      const htmlContent = `
                     <!DOCTYPE html>
                     <html lang="es">
                     <head>
@@ -548,13 +556,12 @@ export const updateObservacion = async (req, res) => {
                     </body>
                     </html>
                 `;
-        await sendEmail(NOTIFICATION_EMAILS.join(","), subject, htmlContent);
-      } catch (emailError) {
-        console.error(
-          "Error al enviar email de notificación (actualización):",
-          emailError
-        );
-      }
+      await sendEmail(recipients.join(","), subject, htmlContent);
+    } catch (emailError) {
+      console.error(
+        "Error al enviar email de notificación (actualización):",
+        emailError
+      );
     }
 
     res.json({ message: "Updated" });

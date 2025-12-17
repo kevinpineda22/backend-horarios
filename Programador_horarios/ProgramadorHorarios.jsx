@@ -10,9 +10,9 @@ import {
   FaExclamationTriangle,
   FaSpinner,
 } from "react-icons/fa";
-import { toast } from "react-toastify";
+import { toast } from "react-hot-toast";
 import { apiPublic, api } from "../../services/apiHorarios"; // Ajusta a tu ruta de servicios
-import Swal from "sweetalert2"; // Importar Swal para el borrado
+import Swal from "./utils/swalCustom"; // Importar Swal para el borrado
 
 // --- 1. Importar Hooks ---
 import { useEmployeeData } from "./hooks/useEmployeeData";
