@@ -1,34 +1,30 @@
 import React, { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import {
   FaUser,
-  FaSearch,
+  FaPlus,
+  FaFileUpload,
   FaSpinner,
   FaTimes,
-  FaPlus,
-  FaFileCsv,
-  FaFileUpload,
-  FaUndo,
   FaToggleOn,
   FaToggleOff,
   FaChevronDown,
+  FaUndo,
+  FaFileCsv,
 } from "react-icons/fa";
-import { toast } from "react-toastify";
-import { api } from "../../services/apiHorarios";
-import "./ObservacionesPH.css";
-
-// Importa useDropzone para manejar la zona de arrastre
+import { motion, AnimatePresence } from "framer-motion";
 import { useDropzone } from "react-dropzone";
+import { toast } from "react-hot-toast";
+import { api } from "../../services/apiHorarios";
+import "./ObservacionesPH.css"; // Reutilizamos estilos
 
+// --- COMPONENTE FormularioEmpleado ---
 const FormularioEmpleado = ({ onEmpleadoCreado, onCancel }) => {
-  const [nombre, setNombre] = useState("");
   const [cedula, setCedula] = useState("");
-  const [celular, setCelular] = useState("");
+  const [nombreCompleto, setNombreCompleto] = useState("");
   const [correo, setCorreo] = useState("");
   const [fechaContratacion, setFechaContratacion] = useState("");
-  const [empresaId, setEmpresaId] = useState("");
   const [sedeId, setSedeId] = useState("");
-  const [saving, setSaving] = useState(false); // Lista de sedes disponibles
+  const [saving, setSaving] = useState(false);
 
   const sedesDisponibles = [
     "LA 10 GIRARDOTA",
@@ -37,39 +33,31 @@ const FormularioEmpleado = ({ onEmpleadoCreado, onCancel }) => {
     "LOTE",
     "ANDAMIOS GIRARDOTA",
     "MERKAHORRO",
+    "LA CEBRA GIRARDOTA",
   ];
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!nombre || !cedula) {
-      toast.error("Nombre y cédula son obligatorios.");
+    if (!cedula || !nombreCompleto || !sedeId) {
+      toast.error("Cédula, Nombre y Sede son obligatorios.");
       return;
     }
+
     setSaving(true);
     try {
-      const payload = {
-        nombre_completo: nombre,
+      await api.post("/empleados", {
         cedula,
-        celular: celular || null,
-        correo_electronico: correo || null,
+        nombre_completo: nombreCompleto,
+        correo,
         fecha_contratacion: fechaContratacion || null,
-        empresa_id: empresaId || "construahorro",
-        sede_id: sedeId || null,
-      };
-      const { data } = await api.post("/empleados", payload);
-      toast.success("Empleado creado con éxito!");
-      onEmpleadoCreado(data);
-      setNombre("");
-      setCedula("");
-      setCelular("");
-      setCorreo("");
-      setFechaContratacion("");
-      setEmpresaId("");
-      setSedeId("");
+        sede_id: sedeId,
+        estado: "activo",
+      });
+      toast.success("Empleado creado exitosamente.");
+      onEmpleadoCreado();
     } catch (err) {
-      console.error(err);
       toast.error(
-        "Error al crear el empleado: " +
+        "Error al crear empleado: " +
           (err.response?.data?.message || err.message)
       );
     } finally {
@@ -79,34 +67,17 @@ const FormularioEmpleado = ({ onEmpleadoCreado, onCancel }) => {
 
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.9 }}
-      animate={{ opacity: 1, scale: 1 }}
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -10 }}
       className="observaciones-ph-search-card"
     >
-           {" "}
       <h3 className="observaciones-ph-search-title">
-                <FaPlus /> Crear Nuevo Empleado      {" "}
+        <FaPlus /> Nuevo Empleado
       </h3>
-           {" "}
-      <form onSubmit={handleSubmit} className="observaciones-ph-form">
-               {" "}
+      <form onSubmit={handleSubmit}>
         <div className="observaciones-ph-form-group">
-                    <label htmlFor="nombre">Nombre Completo</label>
-                   {" "}
-          <input
-            type="text"
-            id="nombre"
-            className="observaciones-ph-form-input"
-            value={nombre}
-            onChange={(e) => setNombre(e.target.value)}
-            required
-          />
-                 {" "}
-        </div>
-               {" "}
-        <div className="observaciones-ph-form-group">
-                    <label htmlFor="cedula">Cédula</label>
-                   {" "}
+          <label htmlFor="cedula">Cédula *</label>
           <input
             type="text"
             id="cedula"
@@ -115,25 +86,20 @@ const FormularioEmpleado = ({ onEmpleadoCreado, onCancel }) => {
             onChange={(e) => setCedula(e.target.value)}
             required
           />
-                 {" "}
         </div>
-               {" "}
         <div className="observaciones-ph-form-group">
-                    <label htmlFor="celular">Celular</label>
-                   {" "}
+          <label htmlFor="nombreCompleto">Nombre Completo *</label>
           <input
-            type="tel"
-            id="celular"
+            type="text"
+            id="nombreCompleto"
             className="observaciones-ph-form-input"
-            value={celular}
-            onChange={(e) => setCelular(e.target.value)}
+            value={nombreCompleto}
+            onChange={(e) => setNombreCompleto(e.target.value)}
+            required
           />
-                 {" "}
         </div>
-               {" "}
         <div className="observaciones-ph-form-group">
-                    <label htmlFor="correo">Correo Electrónico</label>
-                   {" "}
+          <label htmlFor="correo">Correo Electrónico</label>
           <input
             type="email"
             id="correo"
@@ -141,13 +107,9 @@ const FormularioEmpleado = ({ onEmpleadoCreado, onCancel }) => {
             value={correo}
             onChange={(e) => setCorreo(e.target.value)}
           />
-                 {" "}
         </div>
-               {" "}
         <div className="observaciones-ph-form-group">
-                   {" "}
           <label htmlFor="fechaContratacion">Fecha de Contratación</label>
-                   {" "}
           <input
             type="date"
             id="fechaContratacion"
@@ -155,56 +117,46 @@ const FormularioEmpleado = ({ onEmpleadoCreado, onCancel }) => {
             value={fechaContratacion}
             onChange={(e) => setFechaContratacion(e.target.value)}
           />
-                 {" "}
         </div>
-               {" "}
         <div className="observaciones-ph-form-group">
-                    <label htmlFor="sedeId">Sede</label>         {" "}
+          <label htmlFor="sedeId">Sede *</label>
           <select
             id="sedeId"
             className="observaciones-ph-form-input"
             value={sedeId}
             onChange={(e) => setSedeId(e.target.value)}
+            required
           >
-                        <option value="">Seleccionar sede...</option>           {" "}
+            <option value="">Seleccionar sede...</option>
             {sedesDisponibles.map((sede) => (
               <option key={sede} value={sede}>
-                                {sede}             {" "}
+                {sede}
               </option>
             ))}
-                     {" "}
           </select>
-                 {" "}
         </div>
-               {" "}
         <div className="observaciones-ph-form-actions">
-                   {" "}
           <button
             type="submit"
             className="observaciones-ph-btn-action primary"
             disabled={saving}
           >
-                       {" "}
             {saving ? (
               <FaSpinner className="observaciones-ph-spinner" />
             ) : (
               <FaPlus />
             )}{" "}
-            Crear          {" "}
+            Crear
           </button>
-                   {" "}
           <button
             type="button"
             className="observaciones-ph-btn-action observaciones-ph-btn-danger"
             onClick={onCancel}
           >
-                        <FaUndo /> Cancelar          {" "}
+            <FaUndo /> Cancelar
           </button>
-                 {" "}
         </div>
-             {" "}
       </form>
-         {" "}
     </motion.div>
   );
 };
@@ -332,24 +284,19 @@ const GestionEmpleados = () => {
 
   return (
     <div className="observaciones-ph-layout-container">
-           {" "}
       <div className="observaciones-ph-panel-izquierdo">
-               {" "}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           className="observaciones-ph-search-card"
         >
-                   {" "}
           <h2 className="observaciones-ph-search-title">
-                        <FaUser /> Opciones de Empleados          {" "}
+            <FaUser /> Opciones de Empleados
           </h2>
-                   {" "}
           <div
             className="observaciones-ph-form-actions"
             style={{ flexDirection: "column" }}
           >
-                       {" "}
             <button
               className="observaciones-ph-btn-action primary"
               onClick={() => {
@@ -357,9 +304,8 @@ const GestionEmpleados = () => {
                 setShowUploadForm(false);
               }}
             >
-                            <FaPlus /> Crear Empleado Manualmente            {" "}
+              <FaPlus /> Crear Empleado Manualmente
             </button>
-                       {" "}
             <button
               className="observaciones-ph-btn-action"
               onClick={() => {
@@ -368,15 +314,12 @@ const GestionEmpleados = () => {
               }}
               style={{ marginTop: "1rem" }}
             >
-                            <FaFileUpload /> Subir Archivo CSV/Excel            {" "}
+              <FaFileUpload /> Subir Archivo CSV/Excel
             </button>
-                     {" "}
           </div>
-                 {" "}
         </motion.div>
-                       {" "}
+
         <AnimatePresence>
-                   {" "}
           {showCreateForm && (
             <FormularioEmpleado
               onEmpleadoCreado={() => {
@@ -386,7 +329,6 @@ const GestionEmpleados = () => {
               onCancel={() => setShowCreateForm(false)}
             />
           )}
-                   {" "}
           {showUploadForm && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
@@ -394,23 +336,20 @@ const GestionEmpleados = () => {
               exit={{ opacity: 0, y: -10 }}
               className="observaciones-ph-search-card"
             >
-                           {" "}
               <h3 className="observaciones-ph-search-title">
-                                <FaFileCsv /> Carga Masiva              {" "}
+                <FaFileCsv /> Carga Masiva
               </h3>
-                           {" "}
               <div className="observaciones-ph-form-group">
                 <label className="observaciones-ph-file-label">
                   Archivo de Carga
                 </label>
-                               {" "}
                 <div
                   {...getRootProps()}
                   className={`observaciones-ph-dropzone ${
                     isDragActive ? "observaciones-ph-dropzone-active" : ""
                   } ${file ? "observaciones-ph-dropzone-has-file" : ""}`}
                 >
-                                    <input {...getInputProps()} />
+                  <input {...getInputProps()} />
                   {file ? (
                     <div className="observaciones-ph-file-chip">
                       <FaFileCsv />
@@ -421,7 +360,7 @@ const GestionEmpleados = () => {
                         type="button"
                         className="observaciones-ph-btn-action observaciones-ph-btn-danger"
                         onClick={(e) => {
-                          e.stopPropagation(); // Evita que el evento se propague al `div` del dropzone
+                          e.stopPropagation();
                           setFile(null);
                         }}
                       >
@@ -443,46 +382,35 @@ const GestionEmpleados = () => {
                       </div>
                     </div>
                   )}
-                                 {" "}
                 </div>
-                             {" "}
               </div>
-                           {" "}
               <button
                 className="observaciones-ph-btn-action primary"
                 onClick={handleFileUpload}
                 disabled={!file || uploading}
                 style={{ width: "100%", marginTop: "1rem" }}
               >
-                               {" "}
                 {uploading ? (
                   <FaSpinner className="observaciones-ph-spinner" />
                 ) : (
                   <FaFileUpload />
                 )}
-                                {uploading ? "Cargando..." : "Subir y Procesar"}
-                             {" "}
+                {uploading ? "Cargando..." : "Subir y Procesar"}
               </button>
-                         {" "}
             </motion.div>
           )}
-                 {" "}
         </AnimatePresence>
-             {" "}
       </div>
-           {" "}
+
       <div className="observaciones-ph-panel-derecho">
-               {" "}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           className="observaciones-ph-search-card"
         >
-                   {" "}
           <h2 className="observaciones-ph-search-title">
-                        <FaUser /> Listado de Empleados          {" "}
+            <FaUser /> Listado de Empleados
           </h2>
-                   {" "}
           <input
             type="text"
             className="observaciones-ph-form-input"
@@ -490,14 +418,11 @@ const GestionEmpleados = () => {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
-                   {" "}
           <div
             className="observaciones-ph-table-wrapper"
             style={{ marginTop: "1rem" }}
           >
-                       {" "}
             <table className="observaciones-ph-table">
-                           {" "}
               <thead>
                 <tr>
                   <th style={{ width: "15%", textAlign: "left" }}>Cédula</th>
@@ -506,30 +431,33 @@ const GestionEmpleados = () => {
                   <th style={{ width: "20%", textAlign: "center" }}>Acción</th>
                 </tr>
               </thead>
-                           {" "}
               <tbody>
-                               {" "}
                 {loading ? (
                   <tr>
-                                       {" "}
                     <td colSpan="4" className="observaciones-ph-table-cell">
-                                           {" "}
                       <FaSpinner className="observaciones-ph-spinner" />{" "}
-                      Cargando...                    {" "}
+                      Cargando...
                     </td>
-                                     {" "}
                   </tr>
                 ) : Array.isArray(empleados) && empleados.length > 0 ? (
                   empleados.slice(0, visibleEmployees).map((emp) => (
                     <tr key={emp.id}>
-                      <td className="observaciones-ph-table-cell" style={{ textAlign: "left" }}>
+                      <td
+                        className="observaciones-ph-table-cell"
+                        style={{ textAlign: "left" }}
+                      >
                         {emp.cedula}
                       </td>
-                      <td className="observaciones-ph-table-cell" style={{ textAlign: "left" }}>
+                      <td
+                        className="observaciones-ph-table-cell"
+                        style={{ textAlign: "left" }}
+                      >
                         {emp.nombre_completo}
                       </td>
-                      <td className="observaciones-ph-table-cell" style={{ textAlign: "center" }}>
-                                               {" "}
+                      <td
+                        className="observaciones-ph-table-cell"
+                        style={{ textAlign: "center" }}
+                      >
                         <span
                           className="observaciones-ph-chip"
                           style={{
@@ -541,62 +469,49 @@ const GestionEmpleados = () => {
                               emp.estado === "activo" ? "#10b981" : "#cbd5e1",
                           }}
                         >
-                                                    {emp.estado}               
-                                 {" "}
+                          {emp.estado}
                         </span>
-                                             {" "}
                       </td>
-                      <td className="observaciones-ph-table-cell" style={{ textAlign: "center" }}>
+                      <td
+                        className="observaciones-ph-table-cell"
+                        style={{ textAlign: "center" }}
+                      >
                         <button
                           className="observaciones-ph-btn-action"
                           onClick={() => handleToggleEstado(emp)}
                         >
-                                                   {" "}
                           {emp.estado === "activo" ? (
                             <FaToggleOn style={{ color: "#10b981" }} />
                           ) : (
                             <FaToggleOff style={{ color: "#64748b" }} />
                           )}
-                                                   {" "}
-                          {emp.estado === "activo" ? "Desactivar" : "Activar"} 
-                                               {" "}
+                          {emp.estado === "activo" ? "Desactivar" : "Activar"}
                         </button>
-                                             {" "}
                       </td>
-                                       {" "}
                     </tr>
                   ))
                 ) : (
                   <tr>
-                                       {" "}
                     <td colSpan="4" className="observaciones-ph-table-cell">
-                                            <FaTimes /> No hay empleados que
-                      coincidan con la búsqueda.                    {" "}
+                      <FaTimes /> No hay empleados que coincidan con la
+                      búsqueda.
                     </td>
-                                     {" "}
                   </tr>
                 )}
-                             {" "}
               </tbody>
-                         {" "}
             </table>
-                     {" "}
           </div>
-                   {" "}
           {Array.isArray(empleados) && empleados.length > visibleEmployees && (
             <button
               className="observaciones-ph-btn-action primary"
               style={{ width: "100%", marginTop: "1rem" }}
               onClick={() => setVisibleEmployees((v) => v + 20)}
             >
-                            <FaChevronDown /> Cargar más            {" "}
+              <FaChevronDown /> Cargar más
             </button>
           )}
-                 {" "}
         </motion.div>
-             {" "}
       </div>
-         {" "}
     </div>
   );
 };

@@ -15,6 +15,7 @@ import {
   WEEKLY_EXTRA_LIMIT,
   MAX_OVERTIME_PER_DAY, // Límite de horas banco por día
   hmToMinutes, // <-- IMPORTADO
+  subtractTimeRanges,
 } from "../utils/programadorHorariosUtils"; // Ajusta la ruta
 
 // --- Helpers de Swal para edición ---
@@ -366,6 +367,29 @@ export function useScheduleEditing(blockingDatesMap, onScheduleUpdated) {
             isReduced,
             reducedDayType
           );
+
+          // --- FILTRAR SEGMENTOS POR ESTUDIO ---
+          const studyRanges = [];
+          dayBlockingDates.forEach((b) => {
+            if (b.tipo === "Estudio" && b.range) {
+              const [startStr, endStr] = b.range.split(" - ");
+              if (startStr && endStr) {
+                studyRanges.push({
+                  start: hmToMinutes(startStr),
+                  end: hmToMinutes(endStr),
+                });
+              }
+            }
+          });
+
+          if (studyRanges.length > 0) {
+            dayInfo.segments = subtractTimeRanges(
+              dayInfo.segments,
+              studyRanges
+            );
+          }
+          // -------------------------------------
+
           const { blocks, entryTime, exitTime } = allocateHoursRandomly(
             day.fecha,
             dayInfo,

@@ -68,6 +68,41 @@ const minutesToHM = (m) => {
   return `${pad(hh)}:${pad(mm)}`;
 };
 
+const subtractTimeRanges = (segments, blockedRanges) => {
+  let currentSegments = [...segments];
+
+  for (const block of blockedRanges) {
+    const nextSegments = [];
+    for (const seg of currentSegments) {
+      // Case 1: Block completely covers segment -> Remove segment
+      if (block.start <= seg.from && block.end >= seg.to) {
+        continue;
+      }
+      // Case 2: Block is outside segment -> Keep segment
+      if (block.end <= seg.from || block.start >= seg.to) {
+        nextSegments.push(seg);
+        continue;
+      }
+      // Case 3: Block overlaps
+      // Sub-case 3a: Block cuts the start
+      if (block.start <= seg.from && block.end < seg.to) {
+        nextSegments.push({ from: block.end, to: seg.to });
+      }
+      // Sub-case 3b: Block cuts the end
+      else if (block.start > seg.from && block.end >= seg.to) {
+        nextSegments.push({ from: seg.from, to: block.start });
+      }
+      // Sub-case 3c: Block splits the segment in middle
+      else if (block.start > seg.from && block.end < seg.to) {
+        nextSegments.push({ from: seg.from, to: block.start });
+        nextSegments.push({ from: block.end, to: seg.to });
+      }
+    }
+    currentSegments = nextSegments;
+  }
+  return currentSegments.sort((a, b) => a.from - b.from);
+};
+
 // ========================
 // Nombres de días
 // ========================
@@ -398,6 +433,8 @@ export function generateScheduleForRange56(
 
       // Check for partial observations (Estudio)
       let absenceMinutes = 0;
+      const studyRanges = []; // <-- Collect ranges for subtraction
+
       if (partialObservations && partialObservations.length > 0) {
         for (const obs of partialObservations) {
           if (day.ymd >= obs.start && day.ymd <= obs.end) {
@@ -419,12 +456,14 @@ export function generateScheduleForRange56(
                 const endMins = hmToMinutes(dayConfig.fin);
                 if (endMins > startMins) {
                   absenceMinutes += endMins - startMins;
+                  studyRanges.push({ start: startMins, end: endMins });
                 }
               }
             }
           }
         }
       }
+      day.studyRanges = studyRanges; // Store for later use in allocation
       const absenceHours = absenceMinutes / 60;
       targetTotalHours = Math.max(0, targetTotalHours - absenceHours);
 
@@ -459,6 +498,13 @@ export function generateScheduleForRange56(
         isReduced,
         tipoReduccion
       );
+
+      // --- Apply Study Ranges Subtraction ---
+      if (x.studyRanges && x.studyRanges.length > 0) {
+        dayInfo.segments = subtractTimeRanges(dayInfo.segments, x.studyRanges);
+      }
+      // --------------------------------------
+
       // --- ¡AQUÍ ESTÁ LA CORRECCIÓN! ---
       const { blocks, entryTime, exitTime } = allocateHoursRandomly(
         x.ymd,
