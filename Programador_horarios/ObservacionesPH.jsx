@@ -1507,9 +1507,30 @@ const ObservacionesPH = () => {
                             marginTop: "0.5rem",
                           }}
                         >
-                          <p>
-                            <strong>Horario:</strong> {details.horarioEstudio}
-                          </p>
+                          {details.dias_estudio &&
+                          details.dias_estudio.length > 0 ? (
+                            <div style={{ marginBottom: "0.5rem" }}>
+                              <strong>Días y Horarios:</strong>
+                              <ul
+                                style={{
+                                  paddingLeft: "1.2rem",
+                                  marginTop: "0.2rem",
+                                  marginBottom: "0.5rem",
+                                }}
+                              >
+                                {details.dias_estudio.map((dia, idx) => (
+                                  <li key={idx}>
+                                    {formatFecha(dia.fecha)}: {dia.inicio} -{" "}
+                                    {dia.fin}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          ) : (
+                            <p>
+                              <strong>Horario:</strong> {details.horarioEstudio}
+                            </p>
+                          )}
                           {details.fecha_inicio && (
                             <p>
                               <strong>Periodo:</strong>{" "}

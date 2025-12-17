@@ -63,7 +63,9 @@ const AdminProgramadorHorarios = () => {
             }`}
           >
             <FaCalendarAlt />
-            Programador de Horarios
+            <span className="admin-sch-sidebar-text">
+              Programador de Horarios
+            </span>
           </button>
 
           <button
@@ -73,7 +75,7 @@ const AdminProgramadorHorarios = () => {
             }`}
           >
             <FaClipboardList />
-            Observaciones
+            <span className="admin-sch-sidebar-text">Observaciones</span>
           </button>
 
           <button
@@ -83,7 +85,7 @@ const AdminProgramadorHorarios = () => {
             }`}
           >
             <FaUsers />
-            Gestión de Empleados
+            <span className="admin-sch-sidebar-text">Gestión de Empleados</span>
           </button>
 
           <button
@@ -93,7 +95,7 @@ const AdminProgramadorHorarios = () => {
             }`}
           >
             <FaHistory />
-            Historial General
+            <span className="admin-sch-sidebar-text">Historial General</span>
           </button>
         </nav>
       </motion.div>

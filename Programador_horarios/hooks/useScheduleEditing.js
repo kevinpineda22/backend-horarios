@@ -14,6 +14,7 @@ import {
   WEEKLY_LEGAL_LIMIT,
   WEEKLY_EXTRA_LIMIT,
   MAX_OVERTIME_PER_DAY, // Límite de horas banco por día
+  hmToMinutes, // <-- IMPORTADO
 } from "../utils/programadorHorariosUtils"; // Ajusta la ruta
 
 // --- Helpers de Swal para edición ---
@@ -280,11 +281,14 @@ export function useScheduleEditing(blockingDatesMap, onScheduleUpdated) {
           else newHours = getDailyCapacity(iso, false, null); // 10h o 7h
 
           const blocks = blockingDatesMap.get(day.fecha);
-          if (newHours > 0 && blocks && blocks.length > 0) {
+          // Filtrar bloqueos que NO sean de tipo "Estudio"
+          const realBlocks = (blocks || []).filter((b) => b.tipo !== "Estudio");
+
+          if (newHours > 0 && realBlocks.length > 0) {
             conflicts.push({
               fecha: day.fecha,
               descripcion: day.descripcion,
-              bloqueos: blocks.map((b) => b.tipo).join(", "),
+              bloqueos: realBlocks.map((b) => b.tipo).join(", "),
             });
           }
         });
@@ -319,6 +323,21 @@ export function useScheduleEditing(blockingDatesMap, onScheduleUpdated) {
           else if (manualAdj) newHours = manualAdj.horas_reducidas;
           else if (isReduced) newHours = isSaturday ? 6 : 9;
           else newHours = getDailyCapacity(iso, false, null); // 10h o 7h
+
+          // --- DEDUCCIÓN DE HORAS DE ESTUDIO ---
+          const dayBlockingDates = blockingDatesMap.get(day.fecha) || [];
+          let studyHours = 0;
+          dayBlockingDates.forEach((b) => {
+            if (b.tipo === "Estudio" && b.range) {
+              const [startStr, endStr] = b.range.split(" - ");
+              if (startStr && endStr) {
+                const mins = hmToMinutes(endStr) - hmToMinutes(startStr);
+                studyHours += Math.max(0, mins / 60);
+              }
+            }
+          });
+          newHours = Math.max(0, newHours - studyHours);
+          // -------------------------------------
 
           const legalCap = getLegalCapForDay(iso); // 8h o 4h
           const regularCap = getRegularDailyCap(iso); // 10h o 7h

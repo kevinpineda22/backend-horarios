@@ -291,13 +291,13 @@ export const parseDateOnly = (value) => {
   if (!value) return null;
   if (value instanceof Date && isValid(value)) {
     const date = new Date(value.getTime());
-    date.setUTCHours(0, 0, 0, 0);
+    date.setHours(0, 0, 0, 0);
     return date;
   }
   const raw = `${value}`.trim();
   if (!raw) return null;
   const normalized = raw.length > 10 ? raw.slice(0, 10) : raw;
-  const parsed = parseISO(normalized + "T00:00:00Z");
+  const parsed = parseISO(normalized + "T00:00:00");
   return isValid(parsed) ? parsed : null;
 };
 

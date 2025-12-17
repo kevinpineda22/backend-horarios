@@ -159,15 +159,29 @@ const HistorialGeneralHorarios = () => {
   const [previewUrl, setPreviewUrl] = useState("");
   const [previewMode, setPreviewMode] = useState("");
   const [dateRange, setDateRange] = useState({ from: "", to: "" });
+  const [isHR, setIsHR] = useState(false);
 
   const defaultLayoutPluginInstance = defaultLayoutPlugin();
 
+  useEffect(() => {
+    const checkPerms = async () => {
+      try {
+        const { data } = await api.get("/observaciones/permissions");
+        setIsHR(data.canApprove);
+      } catch (e) {
+        console.error("Error checking permissions", e);
+        setIsHR(false);
+      }
+    };
+    checkPerms();
+  }, []);
+
   const fetchEmpleados = async () => {
     try {
-      const { data, error } = await supabase
-        .from("empleados")
-        .select("id, cedula, nombre_completo, estado");
-      if (error) throw error;
+      // Usamos la API del backend para obtener TODOS los empleados, ignorando RLS
+      const { data } = await api.get(
+        "/empleados?select=id,cedula,nombre_completo,estado"
+      );
       setAllEmpleados(data || []);
       setEmpleados(data || []);
     } catch (err) {
@@ -1094,18 +1108,19 @@ const HistorialGeneralHorarios = () => {
                       <FaHistory /> Historial de Observaciones
                     </h2>
                     {employeeStats[selectedEmpleado.id]
-                      ?.observaciones_no_revisadas > 0 && (
-                      <button
-                        className="historial-general-btn-action mark-reviewed-internal"
-                        onClick={handleMarkAsReviewed}
-                        style={{
-                          alignSelf: "flex-start",
-                          marginBottom: "1rem",
-                        }}
-                      >
-                        <FaCheckCircle /> Marcar pendientes como revisadas
-                      </button>
-                    )}
+                      ?.observaciones_no_revisadas > 0 &&
+                      isHR && (
+                        <button
+                          className="historial-general-btn-action mark-reviewed-internal"
+                          onClick={handleMarkAsReviewed}
+                          style={{
+                            alignSelf: "flex-start",
+                            marginBottom: "1rem",
+                          }}
+                        >
+                          <FaCheckCircle /> Marcar pendientes como revisadas
+                        </button>
+                      )}
                   </div>
 
                   <p className="historial-general-info-note">
@@ -1306,11 +1321,34 @@ const HistorialGeneralHorarios = () => {
                                           <strong>Motivo:</strong>{" "}
                                           {o.observacion}
                                         </p>
-                                        {details.horarioEstudio && (
-                                          <p>
-                                            <strong>Horario:</strong>{" "}
-                                            {details.horarioEstudio}
-                                          </p>
+                                        {details.dias_estudio &&
+                                        details.dias_estudio.length > 0 ? (
+                                          <div style={{ marginTop: "0.5rem" }}>
+                                            <strong>Días y Horarios:</strong>
+                                            <ul
+                                              style={{
+                                                paddingLeft: "1.2rem",
+                                                marginTop: "0.2rem",
+                                                marginBottom: "0.5rem",
+                                              }}
+                                            >
+                                              {details.dias_estudio.map(
+                                                (dia, idx) => (
+                                                  <li key={idx}>
+                                                    {fmtFechaLarga(dia.fecha)}:{" "}
+                                                    {dia.inicio} - {dia.fin}
+                                                  </li>
+                                                )
+                                              )}
+                                            </ul>
+                                          </div>
+                                        ) : (
+                                          details.horarioEstudio && (
+                                            <p>
+                                              <strong>Horario:</strong>{" "}
+                                              {details.horarioEstudio}
+                                            </p>
+                                          )
                                         )}
                                       </div>
                                     );

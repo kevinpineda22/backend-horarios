@@ -176,6 +176,7 @@ const normalizeAndFilterBlockages = (observaciones) => {
         observacion: obs.observacion || "",
         start: startDate, // Devolver como objeto Date
         end: endDate, // Devolver como objeto Date
+        details: details, // ¡NUEVO! Pasar detalles para renderizado avanzado
       };
     })
     .filter(Boolean) // Quitar nulos
@@ -216,15 +217,20 @@ export default function ConsultaHorariosPublica() {
         cedula: ced,
       });
 
-      const sortedHorarios = (data.horarios || []).map((h) => ({
-        ...h,
-        dias: (h.dias || []).slice().sort((a, b) => {
-          const A = wdOrder[a.descripcion] || 99;
-          const B = wdOrder[b.descripcion] || 99;
-          if (A !== B) return A - B;
-          return (a.fecha || "").localeCompare(b.fecha || "");
-        }),
-      }));
+      const sortedHorarios = (data.horarios || [])
+        .map((h) => ({
+          ...h,
+          dias: (h.dias || []).slice().sort((a, b) => {
+            const A = wdOrder[a.descripcion] || 99;
+            const B = wdOrder[b.descripcion] || 99;
+            if (A !== B) return A - B;
+            return (a.fecha || "").localeCompare(b.fecha || "");
+          }),
+        }))
+        .sort((a, b) => {
+          // Ordenar semanas de la más reciente a la más antigua
+          return (b.fecha_inicio || "").localeCompare(a.fecha_inicio || "");
+        });
 
       setEmpleado(data.empleado);
       setHorarios(sortedHorarios);
@@ -390,31 +396,6 @@ export default function ConsultaHorariosPublica() {
                 </div>
               </div>
 
-              {/* ¡NUEVO! Sección de Novedades / Bloqueos */}
-              {observaciones.length > 0 && (
-                <div className="pubcal-novedades-section">
-                  <h3 className="novedades-title">
-                    <FaBan /> Novedades Activas
-                  </h3>
-                  <div className="pubcal-novedades-list">
-                    {observaciones.map((obs) => (
-                      <div key={obs.id} className="novedad-item">
-                        <span className="novedad-tipo">{obs.tipo}</span>
-                        <span className="novedad-rango">
-                          {formatShortDate(format(obs.start, "yyyy-MM-dd"))} al{" "}
-                          {formatShortDate(format(obs.end, "yyyy-MM-dd"))}
-                        </span>
-                        {obs.observacion && (
-                          <span className="novedad-obs">
-                            "{obs.observacion}"
-                          </span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
               <hr className="separator" />
 
               {/* --- Lista de Semanas --- */}
@@ -518,6 +499,7 @@ const DayCard = ({ dia, blockingMap }) => {
   const hasWork = totalHoras > 0;
   const blocks = blockingMap.get(fecha) || [];
   const isBlocked = blocks.length > 0;
+  const primaryBlock = blocks[0];
 
   // 2. Determinar qué mostrar
   let content;
@@ -574,17 +556,25 @@ const DayCard = ({ dia, blockingMap }) => {
               <FaPencilAlt /> Ajuste Manual
             </span>
           )}
+          {/* Mostrar etiqueta de Novedad si hay trabajo pero también novedad (ej. Estudio parcial) */}
+          {isBlocked && (
+            <span className="badge tag-novedad">
+              <FaInfoCircle /> {primaryBlock.tipo}
+            </span>
+          )}
         </div>
       </>
     );
   } else if (isBlocked) {
     // --- Renderizar Día Bloqueado ---
+    const isEstudio = blocks.every((b) => b.tipo === "Estudio");
+
     content = (
-      <div className="day-blocked-info">
-        <FaBan />
+      <div className={`day-blocked-info ${isEstudio ? "estudio-blocked" : ""}`}>
+        {isEstudio ? <FaExclamationTriangle /> : <FaBan />}
         <div className="blocked-details">
-          <strong>{blocks[0].tipo}</strong>
-          <span>{blocks[0].observacion || "Día no laborable"}</span>
+          <strong>{primaryBlock.tipo}</strong>
+          {/* Solo mostramos el tipo como explicación principal */}
         </div>
       </div>
     );

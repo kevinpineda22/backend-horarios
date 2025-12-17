@@ -40,13 +40,13 @@ const parseDateOnly = (value) => {
   if (!value) return null;
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
     const date = new Date(value);
-    date.setUTCHours(0, 0, 0, 0);
+    date.setHours(0, 0, 0, 0);
     return date;
   }
   const strValue = `${value}`.trim();
   if (!strValue) return null;
   const normalized = strValue.length > 10 ? strValue.slice(0, 10) : strValue;
-  const parsed = parseISO(normalized + "T00:00:00Z");
+  const parsed = parseISO(normalized + "T00:00:00");
   return isValid(parsed) ? parsed : null;
 };
 

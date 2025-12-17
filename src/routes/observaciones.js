@@ -1,5 +1,7 @@
 import express from "express";
 import * as ctrl from "../controllers/observacionesController.js";
+import { authenticateUser } from "../middlewares/authMiddleware.js";
+
 const router = express.Router();
 
 /**
@@ -8,7 +10,12 @@ const router = express.Router();
  */
 router.post("/stats", ctrl.getObservacionesStats);
 
-router.patch("/:empleado_id/marcar-revisadas", ctrl.marcarComoRevisadas);
+router.patch(
+  "/:empleado_id/marcar-revisadas",
+  authenticateUser,
+  ctrl.marcarComoRevisadas
+);
+router.get("/permissions", authenticateUser, ctrl.checkPermissions);
 router.get("/:empleado_id", ctrl.getObservacionesByEmpleadoId);
 router.post("/", ctrl.createObservacion);
 router.put("/:id", ctrl.updateObservacion); // El frontend usa PUT para actualizar

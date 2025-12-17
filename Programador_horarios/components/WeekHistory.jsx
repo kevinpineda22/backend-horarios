@@ -111,6 +111,12 @@ const WeekHistory = ({
   onSaveEdit,
   onCancelEdit,
 }) => {
+  const getBlocksForDate = (ymd) => {
+    if (!blockingDatesMap || typeof blockingDatesMap.get !== "function")
+      return [];
+    return blockingDatesMap.get(ymd) || [];
+  };
+
   // --- Cálculos para la vista ---
   // Recalcula los totales de la semana CADA VEZ, basándose en los ajustes manuales si se está editando
   const weeklyData = useMemo(() => {
@@ -174,12 +180,6 @@ const WeekHistory = ({
     () => week.dias?.find((day) => isoWeekdayFromYMD(day.fecha) === 7) || null,
     [week]
   );
-
-  const getBlocksForDate = (ymd) => {
-    if (!blockingDatesMap || typeof blockingDatesMap.get !== "function")
-      return [];
-    return blockingDatesMap.get(ymd) || [];
-  };
 
   return (
     <div className="programmador-horarios-week-card">

@@ -324,23 +324,48 @@ const ProgramadorHorarios = () => {
           )
           .join("\n");
 
+        // Detectar si es SOLO estudio (para cambiar visualización)
+        const isEstudio = summary.every((b) => b.tipo === "Estudio");
+
         if (isBlockingPlaceholder) {
           return (
             <div className="ph-blocking-placeholder" title={tooltip}>
-              <FaBan /> {summary[0]?.tipo || "Bloqueado"}
+              {isEstudio ? <FaExclamationTriangle /> : <FaBan />}{" "}
+              {summary[0]?.tipo || "Bloqueado"}
             </div>
           );
         }
         return (
-          <div className="ph-blocking-content" title={tooltip}>
-            <div className="ph-blocking-title">
-              <FaBan className="ph-blocking-icon" /> Bloqueado
+          <div
+            className={`ph-blocking-content ${
+              isEstudio ? "ph-partial-content" : ""
+            }`}
+            title={tooltip}
+          >
+            <div
+              className="ph-blocking-title"
+              style={isEstudio ? { color: "#b45309" } : {}}
+            >
+              {isEstudio ? (
+                <FaExclamationTriangle className="ph-blocking-icon" />
+              ) : (
+                <FaBan className="ph-blocking-icon" />
+              )}{" "}
+              {isEstudio ? "Novedad" : "Bloqueado"}
             </div>
-            <div className="ph-blocking-type">
+            <div
+              className="ph-blocking-type"
+              style={isEstudio ? { color: "#92400e" } : {}}
+            >
               {summary[0]?.tipo || "Observación"}
             </div>
             {summary[0]?.observacion && (
-              <div className="ph-blocking-note">{summary[0]?.observacion}</div>
+              <div
+                className="ph-blocking-note"
+                style={isEstudio ? { color: "#92400e" } : {}}
+              >
+                {summary[0]?.observacion}
+              </div>
             )}
           </div>
         );
@@ -530,11 +555,34 @@ const ProgramadorHorarios = () => {
 
           {hasBlocking && (
             <div className="ph-blocking-list">
-              <span className="ph-blocking-list-title">
-                <FaBan /> Bloqueado por:
-              </span>
+              {/* Detectar si es SOLO estudio para cambiar el título e icono */}
+              {blockingSummary.every((b) => b.tipo === "Estudio") ? (
+                <span
+                  className="ph-blocking-list-title"
+                  style={{ color: "#b45309" }}
+                >
+                  <FaExclamationTriangle /> Novedad:
+                </span>
+              ) : (
+                <span className="ph-blocking-list-title">
+                  <FaBan /> Bloqueado por:
+                </span>
+              )}
+
               {blockingSummary.slice(0, 2).map((block) => (
-                <div key={block.id} className="ph-blocking-chip">
+                <div
+                  key={block.id}
+                  className="ph-blocking-chip"
+                  style={
+                    block.tipo === "Estudio"
+                      ? {
+                          backgroundColor: "#fef3c7",
+                          color: "#92400e",
+                          border: "1px solid #fcd34d",
+                        }
+                      : {}
+                  }
+                >
                   <span className="chip-type">{block.tipo || "Bloqueo"}</span>
                 </div>
               ))}

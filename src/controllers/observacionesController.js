@@ -625,8 +625,45 @@ export const getObservacionesStats = async (req, res) => {
   }
 };
 
+// --- LISTA CENTRALIZADA DE PERMISOS ---
+const ALLOWED_EMAILS = [
+  "gestionhumana@merkahorro.com",
+  "asistentegh@merkahorrosas.com",
+  "johanmerkahorro777@gmail.com",
+  /* "juanmerkahorro@gmail.com", */
+];
+
+export const checkPermissions = (req, res) => {
+  const user = req.user;
+  const isHR =
+    user &&
+    (ALLOWED_EMAILS.includes(user.email) ||
+      user.role === "gestion_humana" ||
+      user.app_metadata?.role === "gestion_humana" ||
+      user.user_metadata?.role === "gestion_humana");
+
+  res.json({ canApprove: isHR });
+};
+
 export const marcarComoRevisadas = async (req, res) => {
   const { empleado_id } = req.params;
+
+  // --- VALIDACIÓN DE ROL USANDO LA LISTA CENTRALIZADA ---
+  const user = req.user;
+  const isHR =
+    user &&
+    (ALLOWED_EMAILS.includes(user.email) ||
+      user.role === "gestion_humana" ||
+      user.app_metadata?.role === "gestion_humana" ||
+      user.user_metadata?.role === "gestion_humana");
+
+  if (!isHR) {
+    return res
+      .status(403)
+      .json({ message: "No tienes permisos para realizar esta acción." });
+  }
+  // -------------------------
+
   try {
     const { error } = await supabaseAxios.patch(
       `/observaciones?empleado_id=eq.${empleado_id}&revisada=eq.false`,
