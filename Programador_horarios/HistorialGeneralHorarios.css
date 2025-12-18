@@ -30,25 +30,34 @@
   --hgh-radius-lg: 14px;
 }
 
-/* ---------- Layout principal ---------- */
+/* ---------- Layout principal (Flex) ---------- */
 .historial-general-container {
-  min-height: 100vh;
-  padding: 20px;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1.5rem;
+  background: linear-gradient(135deg, #f6f9fc, #eef2f7);
+  min-height: 100vh;
   box-sizing: border-box;
   font-family: "Poppins", system-ui, -apple-system, Segoe UI, Roboto, Arial,
     sans-serif;
 }
 
+/* Eliminamos los estilos de paneles divididos */
+.historial-general-panel-izquierdo,
+.historial-general-panel-derecho {
+  display: contents; /* O simplemente eliminarlos del DOM */
+}
+
 .historial-general-card {
-  width: min(1200px, 100%);
-  background: var(--hgh-bg-primary);
-  border: 1px solid #e2e8f0;
-  border-radius: 16px;
-  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.12);
-  padding: 2rem;
-  text-align: center;
+  background: #ffffff;
+  border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(18, 38, 63, 0.08);
+  padding: 1.5rem;
+  border: 1px solid #e6ebf2;
+  width: 100%;
+  box-sizing: border-box;
+  text-align: left;
 }
 
 .historial-general-logo {
@@ -1200,20 +1209,7 @@
   background-color: #fffbeb;
 }
 
-.historial-general-observacion-card.not-reviewed::before {
-  content: "Pendiente";
-  position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
-  background: var(--hgh-warning);
-  color: white;
-  padding: 0.125rem 0.5rem;
-  border-radius: 9999px;
-  font-size: 0.625rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  z-index: 2;
-}
+/* Eliminado el pseudo-elemento ::before que duplicaba el texto "Pendiente" */
 
 /* ---------- Responsive Design ---------- */
 @media (max-width: 900px) {
@@ -1341,4 +1337,73 @@
     flex-direction: row;
     gap: 0.25rem;
   }
+}
+
+/* ---------- Dashboard Informativo ---------- */
+.historial-general-dashboard {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.historial-general-stat-card {
+  background: #ffffff;
+  border-radius: 14px;
+  padding: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e6ebf2;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.historial-general-stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px rgba(0, 0, 0, 0.08);
+}
+
+.stat-icon-wrapper {
+  width: 60px;
+  height: 60px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.75rem;
+  flex-shrink: 0;
+}
+
+.stat-icon-wrapper.primary {
+  background: #eef2ff;
+  color: #4f46e5;
+}
+
+.stat-icon-wrapper.warning {
+  background: #fffbeb;
+  color: #f59e0b;
+}
+
+.stat-icon-wrapper.success {
+  background: #ecfdf5;
+  color: #10b981;
+}
+
+.stat-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.stat-value {
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: #1e2a5a;
+  line-height: 1.2;
+}
+
+.stat-label {
+  font-size: 0.9rem;
+  color: #64748b;
+  font-weight: 500;
 }

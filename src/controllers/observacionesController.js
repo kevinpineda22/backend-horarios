@@ -186,6 +186,17 @@ export const createObservacion = async (req, res) => {
     firma_lider_base64,
   } = req.body;
 
+  // Inyectar información del creador en details si existe el usuario autenticado
+  if (req.user) {
+    req.body.details = req.body.details || {};
+    req.body.details.creado_por_email = req.user.email;
+    const meta = req.user.user_metadata || req.user.app_metadata || {};
+    if (meta.full_name || meta.name || meta.nombre_completo) {
+      req.body.details.creado_por_nombre =
+        meta.full_name || meta.name || meta.nombre_completo;
+    }
+  }
+
   const details = req.body.details || {};
 
   const dateRangeError = validateDateRangePayload(tipo_novedad, details);

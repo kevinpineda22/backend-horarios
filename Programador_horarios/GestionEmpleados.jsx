@@ -284,236 +284,229 @@ const GestionEmpleados = () => {
 
   return (
     <div className="observaciones-ph-layout-container">
-      <div className="observaciones-ph-panel-izquierdo">
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="observaciones-ph-search-card"
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="observaciones-ph-search-card"
+      >
+        <h2 className="observaciones-ph-search-title">
+          <FaUser /> Opciones de Empleados
+        </h2>
+        <div
+          className="observaciones-ph-form-actions"
+          style={{ flexDirection: "column" }}
         >
-          <h2 className="observaciones-ph-search-title">
-            <FaUser /> Opciones de Empleados
-          </h2>
-          <div
-            className="observaciones-ph-form-actions"
-            style={{ flexDirection: "column" }}
+          <button
+            className="observaciones-ph-btn-action primary"
+            onClick={() => {
+              setShowCreateForm(!showCreateForm);
+              setShowUploadForm(false);
+            }}
           >
-            <button
-              className="observaciones-ph-btn-action primary"
-              onClick={() => {
-                setShowCreateForm(!showCreateForm);
-                setShowUploadForm(false);
-              }}
-            >
-              <FaPlus /> Crear Empleado Manualmente
-            </button>
-            <button
-              className="observaciones-ph-btn-action"
-              onClick={() => {
-                setShowUploadForm(!showUploadForm);
-                setShowCreateForm(false);
-              }}
-              style={{ marginTop: "1rem" }}
-            >
-              <FaFileUpload /> Subir Archivo CSV/Excel
-            </button>
-          </div>
-        </motion.div>
-
-        <AnimatePresence>
-          {showCreateForm && (
-            <FormularioEmpleado
-              onEmpleadoCreado={() => {
-                setShowCreateForm(false);
-                fetchEmpleados();
-              }}
-              onCancel={() => setShowCreateForm(false)}
-            />
-          )}
-          {showUploadForm && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="observaciones-ph-search-card"
-            >
-              <h3 className="observaciones-ph-search-title">
-                <FaFileCsv /> Carga Masiva
-              </h3>
-              <div className="observaciones-ph-form-group">
-                <label className="observaciones-ph-file-label">
-                  Archivo de Carga
-                </label>
-                <div
-                  {...getRootProps()}
-                  className={`observaciones-ph-dropzone ${
-                    isDragActive ? "observaciones-ph-dropzone-active" : ""
-                  } ${file ? "observaciones-ph-dropzone-has-file" : ""}`}
-                >
-                  <input {...getInputProps()} />
-                  {file ? (
-                    <div className="observaciones-ph-file-chip">
-                      <FaFileCsv />
-                      <span className="observaciones-ph-file-chip-name">
-                        {file.name}
-                      </span>
-                      <button
-                        type="button"
-                        className="observaciones-ph-btn-action observaciones-ph-btn-danger"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setFile(null);
-                        }}
-                      >
-                        <FaTimes /> Quitar
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="observaciones-ph-dropzone-inner">
-                      <div className="observaciones-ph-dropzone-icon">
-                        <FaFileUpload />
-                      </div>
-                      <div className="observaciones-ph-dropzone-text">
-                        <p className="observaciones-ph-dropzone-title">
-                          Arrastra y suelta tu archivo aquí
-                        </p>
-                        <p className="observaciones-ph-dropzone-subtitle">
-                          o <b>haz clic</b> para seleccionar
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-              <button
-                className="observaciones-ph-btn-action primary"
-                onClick={handleFileUpload}
-                disabled={!file || uploading}
-                style={{ width: "100%", marginTop: "1rem" }}
-              >
-                {uploading ? (
-                  <FaSpinner className="observaciones-ph-spinner" />
-                ) : (
-                  <FaFileUpload />
-                )}
-                {uploading ? "Cargando..." : "Subir y Procesar"}
-              </button>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-
-      <div className="observaciones-ph-panel-derecho">
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="observaciones-ph-search-card"
-        >
-          <h2 className="observaciones-ph-search-title">
-            <FaUser /> Listado de Empleados
-          </h2>
-          <input
-            type="text"
-            className="observaciones-ph-form-input"
-            placeholder="Buscar por Cédula o Nombre"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-          <div
-            className="observaciones-ph-table-wrapper"
+            <FaPlus /> Crear Empleado Manualmente
+          </button>
+          <button
+            className="observaciones-ph-btn-action"
+            onClick={() => {
+              setShowUploadForm(!showUploadForm);
+              setShowCreateForm(false);
+            }}
             style={{ marginTop: "1rem" }}
           >
-            <table className="observaciones-ph-table">
-              <thead>
-                <tr>
-                  <th style={{ width: "15%", textAlign: "left" }}>Cédula</th>
-                  <th style={{ width: "45%", textAlign: "left" }}>Nombre</th>
-                  <th style={{ width: "20%", textAlign: "center" }}>Estado</th>
-                  <th style={{ width: "20%", textAlign: "center" }}>Acción</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <tr>
-                    <td colSpan="4" className="observaciones-ph-table-cell">
-                      <FaSpinner className="observaciones-ph-spinner" />{" "}
-                      Cargando...
-                    </td>
-                  </tr>
-                ) : Array.isArray(empleados) && empleados.length > 0 ? (
-                  empleados.slice(0, visibleEmployees).map((emp) => (
-                    <tr key={emp.id}>
-                      <td
-                        className="observaciones-ph-table-cell"
-                        style={{ textAlign: "left" }}
-                      >
-                        {emp.cedula}
-                      </td>
-                      <td
-                        className="observaciones-ph-table-cell"
-                        style={{ textAlign: "left" }}
-                      >
-                        {emp.nombre_completo}
-                      </td>
-                      <td
-                        className="observaciones-ph-table-cell"
-                        style={{ textAlign: "center" }}
-                      >
-                        <span
-                          className="observaciones-ph-chip"
-                          style={{
-                            background:
-                              emp.estado === "activo" ? "#d1fae5" : "#f1f5f9",
-                            color:
-                              emp.estado === "activo" ? "#065f46" : "#475569",
-                            borderColor:
-                              emp.estado === "activo" ? "#10b981" : "#cbd5e1",
-                          }}
-                        >
-                          {emp.estado}
-                        </span>
-                      </td>
-                      <td
-                        className="observaciones-ph-table-cell"
-                        style={{ textAlign: "center" }}
-                      >
-                        <button
-                          className="observaciones-ph-btn-action"
-                          onClick={() => handleToggleEstado(emp)}
-                        >
-                          {emp.estado === "activo" ? (
-                            <FaToggleOn style={{ color: "#10b981" }} />
-                          ) : (
-                            <FaToggleOff style={{ color: "#64748b" }} />
-                          )}
-                          {emp.estado === "activo" ? "Desactivar" : "Activar"}
-                        </button>
-                      </td>
-                    </tr>
-                  ))
+            <FaFileUpload /> Subir Archivo CSV/Excel
+          </button>
+        </div>
+      </motion.div>
+
+      <AnimatePresence>
+        {showCreateForm && (
+          <FormularioEmpleado
+            onEmpleadoCreado={() => {
+              setShowCreateForm(false);
+              fetchEmpleados();
+            }}
+            onCancel={() => setShowCreateForm(false)}
+          />
+        )}
+        {showUploadForm && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="observaciones-ph-search-card"
+          >
+            <h3 className="observaciones-ph-search-title">
+              <FaFileCsv /> Carga Masiva
+            </h3>
+            <div className="observaciones-ph-form-group">
+              <label className="observaciones-ph-file-label">
+                Archivo de Carga
+              </label>
+              <div
+                {...getRootProps()}
+                className={`observaciones-ph-dropzone ${
+                  isDragActive ? "observaciones-ph-dropzone-active" : ""
+                } ${file ? "observaciones-ph-dropzone-has-file" : ""}`}
+              >
+                <input {...getInputProps()} />
+                {file ? (
+                  <div className="observaciones-ph-file-chip">
+                    <FaFileCsv />
+                    <span className="observaciones-ph-file-chip-name">
+                      {file.name}
+                    </span>
+                    <button
+                      type="button"
+                      className="observaciones-ph-btn-action observaciones-ph-btn-danger"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setFile(null);
+                      }}
+                    >
+                      <FaTimes /> Quitar
+                    </button>
+                  </div>
                 ) : (
-                  <tr>
-                    <td colSpan="4" className="observaciones-ph-table-cell">
-                      <FaTimes /> No hay empleados que coincidan con la
-                      búsqueda.
-                    </td>
-                  </tr>
+                  <div className="observaciones-ph-dropzone-inner">
+                    <div className="observaciones-ph-dropzone-icon">
+                      <FaFileUpload />
+                    </div>
+                    <div className="observaciones-ph-dropzone-text">
+                      <p className="observaciones-ph-dropzone-title">
+                        Arrastra y suelta tu archivo aquí
+                      </p>
+                      <p className="observaciones-ph-dropzone-subtitle">
+                        o <b>haz clic</b> para seleccionar
+                      </p>
+                    </div>
+                  </div>
                 )}
-              </tbody>
-            </table>
-          </div>
-          {Array.isArray(empleados) && empleados.length > visibleEmployees && (
+              </div>
+            </div>
             <button
               className="observaciones-ph-btn-action primary"
+              onClick={handleFileUpload}
+              disabled={!file || uploading}
               style={{ width: "100%", marginTop: "1rem" }}
-              onClick={() => setVisibleEmployees((v) => v + 20)}
             >
-              <FaChevronDown /> Cargar más
+              {uploading ? (
+                <FaSpinner className="observaciones-ph-spinner" />
+              ) : (
+                <FaFileUpload />
+              )}
+              {uploading ? "Cargando..." : "Subir y Procesar"}
             </button>
-          )}
-        </motion.div>
-      </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="observaciones-ph-search-card"
+      >
+        <h2 className="observaciones-ph-search-title">
+          <FaUser /> Listado de Empleados
+        </h2>
+        <input
+          type="text"
+          className="observaciones-ph-form-input"
+          placeholder="Buscar por Cédula o Nombre"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
+        <div
+          className="observaciones-ph-table-wrapper"
+          style={{ marginTop: "1rem" }}
+        >
+          <table className="observaciones-ph-table">
+            <thead>
+              <tr>
+                <th style={{ width: "15%", textAlign: "left" }}>Cédula</th>
+                <th style={{ width: "45%", textAlign: "left" }}>Nombre</th>
+                <th style={{ width: "20%", textAlign: "center" }}>Estado</th>
+                <th style={{ width: "20%", textAlign: "center" }}>Acción</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan="4" className="observaciones-ph-table-cell">
+                    <FaSpinner className="observaciones-ph-spinner" />{" "}
+                    Cargando...
+                  </td>
+                </tr>
+              ) : Array.isArray(empleados) && empleados.length > 0 ? (
+                empleados.slice(0, visibleEmployees).map((emp) => (
+                  <tr key={emp.id}>
+                    <td
+                      className="observaciones-ph-table-cell"
+                      style={{ textAlign: "left" }}
+                    >
+                      {emp.cedula}
+                    </td>
+                    <td
+                      className="observaciones-ph-table-cell"
+                      style={{ textAlign: "left" }}
+                    >
+                      {emp.nombre_completo}
+                    </td>
+                    <td
+                      className="observaciones-ph-table-cell"
+                      style={{ textAlign: "center" }}
+                    >
+                      <span
+                        className="observaciones-ph-chip"
+                        style={{
+                          background:
+                            emp.estado === "activo" ? "#d1fae5" : "#f1f5f9",
+                          color:
+                            emp.estado === "activo" ? "#065f46" : "#475569",
+                          borderColor:
+                            emp.estado === "activo" ? "#10b981" : "#cbd5e1",
+                        }}
+                      >
+                        {emp.estado}
+                      </span>
+                    </td>
+                    <td
+                      className="observaciones-ph-table-cell"
+                      style={{ textAlign: "center" }}
+                    >
+                      <button
+                        className="observaciones-ph-btn-action"
+                        onClick={() => handleToggleEstado(emp)}
+                      >
+                        {emp.estado === "activo" ? (
+                          <FaToggleOn style={{ color: "#10b981" }} />
+                        ) : (
+                          <FaToggleOff style={{ color: "#64748b" }} />
+                        )}
+                        {emp.estado === "activo" ? "Desactivar" : "Activar"}
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="4" className="observaciones-ph-table-cell">
+                    <FaTimes /> No hay empleados que coincidan con la búsqueda.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        {Array.isArray(empleados) && empleados.length > visibleEmployees && (
+          <button
+            className="observaciones-ph-btn-action primary"
+            style={{ width: "100%", marginTop: "1rem" }}
+            onClick={() => setVisibleEmployees((v) => v + 20)}
+          >
+            <FaChevronDown /> Cargar más
+          </button>
+        )}
+      </motion.div>
     </div>
   );
 };
-
 export default GestionEmpleados;

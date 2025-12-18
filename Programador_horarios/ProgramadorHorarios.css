@@ -78,6 +78,12 @@
   gap: 1.25rem;
 }
 
+.programmador-horarios-seccion-superior {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
 .programmador-horarios-search-card {
   background: #ffffff;
   border-radius: 12px;
@@ -2391,9 +2397,7 @@
   font-style: italic;
 }
 
-
 /* Fix interaction for partial blocks */
 .ph-partial-block {
   pointer-events: none !important;
 }
-

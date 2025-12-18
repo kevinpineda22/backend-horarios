@@ -17,7 +17,7 @@ router.patch(
 );
 router.get("/permissions", authenticateUser, ctrl.checkPermissions);
 router.get("/:empleado_id", ctrl.getObservacionesByEmpleadoId);
-router.post("/", ctrl.createObservacion);
+router.post("/", authenticateUser, ctrl.createObservacion);
 router.put("/:id", ctrl.updateObservacion); // El frontend usa PUT para actualizar
 router.delete("/:id", ctrl.deleteObservacion);
 

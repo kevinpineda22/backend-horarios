@@ -28,6 +28,7 @@ import {
   FaSignature,
   FaEraser,
   FaCheckCircle,
+  FaClock,
 } from "react-icons/fa";
 import { useDropzone } from "react-dropzone";
 import { toast } from "react-hot-toast";
@@ -536,6 +537,20 @@ const ObservacionesPH = () => {
       year: "numeric",
       month: "long",
       day: "numeric",
+    });
+  };
+
+  const fmtFechaHora = (isoString) => {
+    if (!isoString) return "";
+    const date = new Date(isoString);
+    return date.toLocaleString("es-CO", {
+      timeZone: "America/Bogota",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
     });
   };
 
@@ -1074,7 +1089,7 @@ const ObservacionesPH = () => {
   };
 
   return (
-    <div className="observaciones-ph-layout-container">
+    <div className="observaciones-ph-layout-container observaciones-ph-split-view">
       <div className="observaciones-ph-seccion-superior">
         {/* CARD DE BÚSQUEDA Y SELECCIÓN */}
         <div className="observaciones-ph-search-card">
@@ -1306,459 +1321,526 @@ const ObservacionesPH = () => {
         )}
       </div>
 
-      {/* SECCIÓN INFERIOR: HISTORIAL */}
+      {/* SECCIÓN INFERIOR: HISTORIAL (Ahora panel derecho) */}
       <div className="observaciones-ph-seccion-inferior">
-        <h2 className="observaciones-ph-search-title">
-          <FaHistory /> Historial de Observaciones
-        </h2>
-        {loadingHistory ? (
-          <div className="observaciones-ph-message">
-            <FaSpinner className="observaciones-ph-spinner" /> Cargando
-            historial...
-          </div>
-        ) : observacionesHistory.length > 0 ? (
-          <div>
-            {paginatedHistory.map((o, idx) => {
-              const details = o.details || {};
+        <div
+          className="observaciones-ph-search-card"
+          style={{ minHeight: "100%" }}
+        >
+          <h2 className="observaciones-ph-search-title">
+            <FaHistory /> Historial de Observaciones
+          </h2>
+          {loadingHistory ? (
+            <div className="observaciones-ph-message">
+              <FaSpinner className="observaciones-ph-spinner" /> Cargando
+              historial...
+            </div>
+          ) : observacionesHistory.length > 0 ? (
+            <div>
+              {paginatedHistory.map((o, idx) => {
+                const details = o.details || {};
 
-              return (
-                <div
-                  key={`${o.id}-${idx}`}
-                  className={`observaciones-ph-history-card ${
-                    !o.revisada ? "not-reviewed" : ""
-                  }`}
-                >
-                  <div className="observaciones-ph-history-card-header">
-                    <span className="observaciones-ph-history-date">
-                      {formatFecha(o.fecha_novedad)}
-                    </span>
-                    {o.revisada ? (
-                      <span className="historial-general-observacion-revisada-badge">
-                        Revisada
-                      </span>
-                    ) : (
-                      <span className="historial-general-observacion-norevisada-badge">
-                        Pendiente
-                      </span>
-                    )}
-                    <span className="observaciones-ph-history-type">
-                      {o.tipo_novedad}
-                    </span>
-                  </div>
-                  <div className="observaciones-ph-history-summary">
-                    {/* Mostrar observación general solo si no es un tipo con "Motivo" específico */}
-                    {o.tipo_novedad !== "Licencias" &&
-                      o.tipo_novedad !== "Préstamos" &&
-                      o.tipo_novedad !== "Permisos" &&
-                      o.tipo_novedad !== "Estudio" &&
-                      o.tipo_novedad !== "Día de la Familia" &&
-                      o.observacion && (
-                        <p style={{ marginBottom: "0.5rem" }}>
-                          {o.observacion}
-                        </p>
-                      )}
-
-                    {/* DETALLES DE LICENCIAS */}
-                    {o.tipo_novedad === "Licencias" && (
-                      <div
-                        className="observaciones-ph-details-group"
-                        style={{
-                          fontSize: "0.9rem",
-                          color: "#334155",
-                          marginTop: "0.5rem",
-                        }}
-                      >
-                        <p>
-                          <strong>Tipo:</strong> {details.sub_tipo_novedad}
-                        </p>
-                        <p>
-                          <strong>Duración:</strong>{" "}
-                          {details.duracion_dias || "0"} días
-                        </p>
-                        <p>
-                          <strong>Periodo:</strong>{" "}
-                          {formatFecha(details.fecha_inicio)} al{" "}
-                          {formatFecha(details.fecha_termino)}
-                        </p>
-                        <p>
-                          <strong>Motivo (Descripción):</strong>{" "}
-                          {o.observacion || "N/A"}
-                        </p>
-                        <p>
-                          <strong>Aprobación:</strong>{" "}
-                          {details.lider_aprueba || "N/A"} -{" "}
-                          {details.fecha_aprobacion
-                            ? formatFecha(details.fecha_aprobacion)
-                            : "Pendiente"}
-                        </p>
-                      </div>
-                    )}
-
-                    {/* DETALLES DE OTROS TIPOS DE NOVEDAD */}
-                    {o.tipo_novedad === "Préstamos" && (
-                      <div
-                        className="observaciones-ph-details-group"
-                        style={{
-                          fontSize: "0.9rem",
-                          color: "#334155",
-                          marginTop: "0.5rem",
-                        }}
-                      >
-                        <p>
-                          <strong>Monto:</strong>{" "}
-                          {formatCurrency(details.monto_solicitado)}
-                        </p>
-                        <p>
-                          <strong>Cuotas:</strong> {details.numero_cuotas}
-                        </p>
-                        <p>
-                          <strong>Motivo:</strong> {o.observacion || "N/A"}
-                        </p>
-                      </div>
-                    )}
-                    {o.tipo_novedad === "Vacaciones" && (
-                      <div
-                        className="observaciones-ph-details-group"
-                        style={{
-                          fontSize: "0.9rem",
-                          color: "#334155",
-                          marginTop: "0.5rem",
-                        }}
-                      >
-                        <p>
-                          <strong>Periodo:</strong>{" "}
-                          {details.periodo_vacacional_ano}
-                        </p>
-                        <p>
-                          <strong>Fechas:</strong>{" "}
-                          {formatFecha(details.fecha_inicio_vacaciones)} al{" "}
-                          {formatFecha(details.fecha_fin_vacaciones)}
-                        </p>
-                        <p>
-                          <strong>Regreso:</strong>{" "}
-                          {formatFecha(details.fecha_regreso_vacaciones)}
-                        </p>
-                      </div>
-                    )}
-                    {o.tipo_novedad === "Incapacidades" && (
-                      <div
-                        className="observaciones-ph-details-group"
-                        style={{
-                          fontSize: "0.9rem",
-                          color: "#334155",
-                          marginTop: "0.5rem",
-                        }}
-                      >
-                        <p>
-                          <strong>Tipo:</strong> {details.tipoIncapacidad}
-                        </p>
-                        {details.fecha_inicio && (
-                          <p>
-                            <strong>Periodo:</strong>{" "}
-                            {formatFecha(details.fecha_inicio)}
-                            {details.fecha_fin
-                              ? ` al ${formatFecha(details.fecha_fin)}`
-                              : ""}
-                          </p>
-                        )}
-                        {details.diasIncapacidad && (
-                          <p>
-                            <strong>Duración:</strong> {details.diasIncapacidad}
-                          </p>
-                        )}
-                      </div>
-                    )}
-                    {o.tipo_novedad === "Estudio" && (
-                      <div
-                        className="observaciones-ph-details-group"
-                        style={{
-                          fontSize: "0.9rem",
-                          color: "#334155",
-                          marginTop: "0.5rem",
-                        }}
-                      >
-                        {details.dias_estudio &&
-                        details.dias_estudio.length > 0 ? (
-                          <div style={{ marginBottom: "0.5rem" }}>
-                            <strong>Días y Horarios:</strong>
-                            <ul
-                              style={{
-                                paddingLeft: "1.2rem",
-                                marginTop: "0.2rem",
-                                marginBottom: "0.5rem",
-                              }}
-                            >
-                              {details.dias_estudio.map((dia, idx) => (
-                                <li key={idx}>
-                                  {formatFecha(dia.fecha)}: {dia.inicio} -{" "}
-                                  {dia.fin}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        ) : (
-                          <p>
-                            <strong>Horario:</strong> {details.horarioEstudio}
-                          </p>
-                        )}
-                        {details.fecha_inicio && (
-                          <p>
-                            <strong>Periodo:</strong>{" "}
-                            {formatFecha(details.fecha_inicio)} al{" "}
-                            {formatFecha(
-                              details.fecha_fin || details.fecha_inicio
-                            )}
-                          </p>
-                        )}
-                        {o.observacion && (
-                          <p>
-                            <strong>Descripción:</strong> {o.observacion}
-                          </p>
-                        )}
-                      </div>
-                    )}
-                    {o.tipo_novedad === "Permisos" && (
-                      <div
-                        className="observaciones-ph-details-group"
-                        style={{
-                          fontSize: "0.9rem",
-                          color: "#334155",
-                          marginTop: "0.5rem",
-                        }}
-                      >
-                        {details.fecha_inicio && (
-                          <p>
-                            <strong>Periodo:</strong>{" "}
-                            {formatFecha(details.fecha_inicio)} al{" "}
-                            {formatFecha(
-                              details.fecha_fin || details.fecha_inicio
-                            )}
-                          </p>
-                        )}
-                        {o.observacion && (
-                          <p>
-                            <strong>Motivo:</strong> {o.observacion}
-                          </p>
-                        )}
-                      </div>
-                    )}
-                    {o.tipo_novedad === "Día de la Familia" && (
-                      <div
-                        className="observaciones-ph-details-group"
-                        style={{
-                          fontSize: "0.9rem",
-                          color: "#334155",
-                          marginTop: "0.5rem",
-                        }}
-                      >
-                        {details.fecha_inicio && (
-                          <p>
-                            <strong>Periodo solicitado:</strong>{" "}
-                            {formatFecha(details.fecha_inicio)} al{" "}
-                            {formatFecha(
-                              details.fecha_fin || details.fecha_inicio
-                            )}
-                          </p>
-                        )}
-                        {details.fecha_propuesta_dia_familia && (
-                          <p>
-                            <strong>Fecha alternativa propuesta:</strong>{" "}
-                            {formatFecha(details.fecha_propuesta_dia_familia)}
-                          </p>
-                        )}
-                        {details.justificacion_dia_familia && (
-                          <p>
-                            <strong>Justificación:</strong>{" "}
-                            {details.justificacion_dia_familia}
-                          </p>
-                        )}
-                        {details.cargo_solicitante_familia && (
-                          <p>
-                            <strong>Cargo del solicitante:</strong>{" "}
-                            {details.cargo_solicitante_familia}
-                          </p>
-                        )}
-                        {o.observacion && (
-                          <p>
-                            <strong>Observaciones:</strong> {o.observacion}
-                          </p>
-                        )}
-                      </div>
-                    )}
-                    {/* DETALLES DE DÍA DE LA FAMILIA */}
-                    {o.tipo_novedad === "Día de la Familia" && (
-                      <div
-                        className="observaciones-ph-details-group"
-                        style={{
-                          fontSize: "0.9rem",
-                          color: "#334155",
-                          marginTop: "0.5rem",
-                        }}
-                      >
-                        {details.fecha_propuesta_dia_familia && (
-                          <p>
-                            <strong>
-                              Fecha Propuesta para el Día de la Familia:
-                            </strong>{" "}
-                            {formatFecha(details.fecha_propuesta_dia_familia)}
-                          </p>
-                        )}
-                        {details.cargo_solicitante_familia && (
-                          <p>
-                            <strong>Cargo del Solicitante:</strong>{" "}
-                            {details.cargo_solicitante_familia}
-                          </p>
-                        )}
-                        {details.justificacion_dia_familia && (
-                          <p>
-                            <strong>Justificación:</strong>{" "}
-                            {details.justificacion_dia_familia}
-                          </p>
-                        )}
-                        {o.observacion && (
-                          <p>
-                            <strong>Observaciones Adicionales:</strong>{" "}
-                            {o.observacion}
-                          </p>
-                        )}
-                      </div>
-                    )}
-
-                    {/* SECCIÓN DE FIRMAS Y ADJUNTOS */}
+                return (
+                  <div
+                    key={`${o.id}-${idx}`}
+                    className={`observaciones-ph-history-card ${
+                      !o.revisada ? "not-reviewed" : ""
+                    }`}
+                  >
                     <div
-                      className="observaciones-ph-details-group"
-                      style={{ marginTop: "1rem" }}
+                      className="observaciones-ph-history-card-header"
+                      style={{ alignItems: "flex-start" }}
                     >
-                      <strong
-                        style={{
-                          display: "block",
-                          marginBottom: "0.5rem",
-                          fontSize: "0.9rem",
-                          color: "#334155",
-                        }}
-                      >
-                        Firmas y Adjuntos:
-                      </strong>
                       <div
                         style={{
                           display: "flex",
-                          flexWrap: "wrap",
+                          flexDirection: "column",
+                          gap: "0.25rem",
+                        }}
+                      >
+                        <span className="observaciones-ph-history-date">
+                          {formatFecha(o.fecha_novedad)}
+                        </span>
+                        {o.fecha_creacion && (
+                          <span
+                            style={{
+                              fontSize: "0.8rem",
+                              color: "#64748b",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "0.3rem",
+                            }}
+                          >
+                            <FaClock size={12} />
+                            Subido: {fmtFechaHora(o.fecha_creacion)}
+                          </span>
+                        )}
+                        {(details.creado_por_nombre ||
+                          details.creado_por_email) && (
+                          <span
+                            style={{
+                              fontSize: "0.8rem",
+                              color: "#64748b",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "0.3rem",
+                            }}
+                          >
+                            <FaUser size={12} />
+                            Por:{" "}
+                            {details.creado_por_nombre ||
+                              details.creado_por_email}
+                          </span>
+                        )}
+                      </div>
+
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "flex-end",
                           gap: "0.5rem",
                         }}
                       >
-                        {/* Firma Empleado - CORREGIDO */}
-                        {o.documento_firma_empleado && (
-                          <FileAttachmentChip
-                            url={o.documento_firma_empleado}
-                            label="Firma Empleado"
-                            openPreview={openPreview}
-                          />
-                        )}
-                        {/* Firma Líder - CORREGIDO */}
-                        {o.documento_firma_lider && (
-                          <FileAttachmentChip
-                            url={o.documento_firma_lider}
-                            label="Firma Líder"
-                            openPreview={openPreview}
-                          />
-                        )}
-                        {/* Otros Documentos */}
-                        {o.documento_adjunto && (
-                          <FileAttachmentChip
-                            url={o.documento_adjunto}
-                            label={
-                              o.tipo_novedad === "Restricciones/Recomendaciones"
-                                ? "Documento RR"
-                                : "Documento General"
-                            }
-                            openPreview={openPreview}
-                          />
-                        )}
-                        {o.documento_incapacidad && (
-                          <FileAttachmentChip
-                            url={o.documento_incapacidad}
-                            label="Incapacidad Médica"
-                            openPreview={openPreview}
-                          />
-                        )}
-                        {o.documento_historia_clinica && (
-                          <FileAttachmentChip
-                            url={o.documento_historia_clinica}
-                            label="Historia Clínica"
-                            openPreview={openPreview}
-                          />
-                        )}
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: "0.5rem",
+                            alignItems: "center",
+                          }}
+                        >
+                          {o.revisada ? (
+                            <span className="historial-general-observacion-revisada-badge">
+                              Revisada
+                            </span>
+                          ) : (
+                            <span className="historial-general-observacion-norevisada-badge">
+                              Pendiente
+                            </span>
+                          )}
+                          <span className="observaciones-ph-history-type">
+                            {o.tipo_novedad}
+                          </span>
+                        </div>
                       </div>
                     </div>
+                    <div className="observaciones-ph-history-summary">
+                      {/* Mostrar observación general solo si no es un tipo con "Motivo" específico */}
+                      {o.tipo_novedad !== "Licencias" &&
+                        o.tipo_novedad !== "Préstamos" &&
+                        o.tipo_novedad !== "Permisos" &&
+                        o.tipo_novedad !== "Estudio" &&
+                        o.tipo_novedad !== "Día de la Familia" &&
+                        o.observacion && (
+                          <p style={{ marginBottom: "0.5rem" }}>
+                            {o.observacion}
+                          </p>
+                        )}
+
+                      {/* DETALLES DE LICENCIAS */}
+                      {o.tipo_novedad === "Licencias" && (
+                        <div
+                          className="observaciones-ph-details-group"
+                          style={{
+                            fontSize: "0.9rem",
+                            color: "#334155",
+                            marginTop: "0.5rem",
+                          }}
+                        >
+                          <p>
+                            <strong>Tipo:</strong> {details.sub_tipo_novedad}
+                          </p>
+                          <p>
+                            <strong>Duración:</strong>{" "}
+                            {details.duracion_dias || "0"} días
+                          </p>
+                          <p>
+                            <strong>Periodo:</strong>{" "}
+                            {formatFecha(details.fecha_inicio)} al{" "}
+                            {formatFecha(details.fecha_termino)}
+                          </p>
+                          <p>
+                            <strong>Motivo (Descripción):</strong>{" "}
+                            {o.observacion || "N/A"}
+                          </p>
+                          <p>
+                            <strong>Aprobación:</strong>{" "}
+                            {details.lider_aprueba || "N/A"} -{" "}
+                            {details.fecha_aprobacion
+                              ? formatFecha(details.fecha_aprobacion)
+                              : "Pendiente"}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* DETALLES DE OTROS TIPOS DE NOVEDAD */}
+                      {o.tipo_novedad === "Préstamos" && (
+                        <div
+                          className="observaciones-ph-details-group"
+                          style={{
+                            fontSize: "0.9rem",
+                            color: "#334155",
+                            marginTop: "0.5rem",
+                          }}
+                        >
+                          <p>
+                            <strong>Monto:</strong>{" "}
+                            {formatCurrency(details.monto_solicitado)}
+                          </p>
+                          <p>
+                            <strong>Cuotas:</strong> {details.numero_cuotas}
+                          </p>
+                          <p>
+                            <strong>Motivo:</strong> {o.observacion || "N/A"}
+                          </p>
+                        </div>
+                      )}
+                      {o.tipo_novedad === "Vacaciones" && (
+                        <div
+                          className="observaciones-ph-details-group"
+                          style={{
+                            fontSize: "0.9rem",
+                            color: "#334155",
+                            marginTop: "0.5rem",
+                          }}
+                        >
+                          <p>
+                            <strong>Periodo:</strong>{" "}
+                            {details.periodo_vacacional_ano}
+                          </p>
+                          <p>
+                            <strong>Fechas:</strong>{" "}
+                            {formatFecha(details.fecha_inicio_vacaciones)} al{" "}
+                            {formatFecha(details.fecha_fin_vacaciones)}
+                          </p>
+                          <p>
+                            <strong>Regreso:</strong>{" "}
+                            {formatFecha(details.fecha_regreso_vacaciones)}
+                          </p>
+                        </div>
+                      )}
+                      {o.tipo_novedad === "Incapacidades" && (
+                        <div
+                          className="observaciones-ph-details-group"
+                          style={{
+                            fontSize: "0.9rem",
+                            color: "#334155",
+                            marginTop: "0.5rem",
+                          }}
+                        >
+                          <p>
+                            <strong>Tipo:</strong> {details.tipoIncapacidad}
+                          </p>
+                          {details.fecha_inicio && (
+                            <p>
+                              <strong>Periodo:</strong>{" "}
+                              {formatFecha(details.fecha_inicio)}
+                              {details.fecha_fin
+                                ? ` al ${formatFecha(details.fecha_fin)}`
+                                : ""}
+                            </p>
+                          )}
+                          {details.diasIncapacidad && (
+                            <p>
+                              <strong>Duración:</strong>{" "}
+                              {details.diasIncapacidad}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      {o.tipo_novedad === "Estudio" && (
+                        <div
+                          className="observaciones-ph-details-group"
+                          style={{
+                            fontSize: "0.9rem",
+                            color: "#334155",
+                            marginTop: "0.5rem",
+                          }}
+                        >
+                          {details.dias_estudio &&
+                          details.dias_estudio.length > 0 ? (
+                            <div style={{ marginBottom: "0.5rem" }}>
+                              <strong>Días y Horarios:</strong>
+                              <ul
+                                style={{
+                                  paddingLeft: "1.2rem",
+                                  marginTop: "0.2rem",
+                                  marginBottom: "0.5rem",
+                                }}
+                              >
+                                {details.dias_estudio.map((dia, idx) => (
+                                  <li key={idx}>
+                                    {formatFecha(dia.fecha)}: {dia.inicio} -{" "}
+                                    {dia.fin}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          ) : (
+                            <p>
+                              <strong>Horario:</strong> {details.horarioEstudio}
+                            </p>
+                          )}
+                          {details.fecha_inicio && (
+                            <p>
+                              <strong>Periodo:</strong>{" "}
+                              {formatFecha(details.fecha_inicio)} al{" "}
+                              {formatFecha(
+                                details.fecha_fin || details.fecha_inicio
+                              )}
+                            </p>
+                          )}
+                          {o.observacion && (
+                            <p>
+                              <strong>Descripción:</strong> {o.observacion}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      {o.tipo_novedad === "Permisos" && (
+                        <div
+                          className="observaciones-ph-details-group"
+                          style={{
+                            fontSize: "0.9rem",
+                            color: "#334155",
+                            marginTop: "0.5rem",
+                          }}
+                        >
+                          {details.fecha_inicio && (
+                            <p>
+                              <strong>Periodo:</strong>{" "}
+                              {formatFecha(details.fecha_inicio)} al{" "}
+                              {formatFecha(
+                                details.fecha_fin || details.fecha_inicio
+                              )}
+                            </p>
+                          )}
+                          {o.observacion && (
+                            <p>
+                              <strong>Motivo:</strong> {o.observacion}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      {o.tipo_novedad === "Día de la Familia" && (
+                        <div
+                          className="observaciones-ph-details-group"
+                          style={{
+                            fontSize: "0.9rem",
+                            color: "#334155",
+                            marginTop: "0.5rem",
+                          }}
+                        >
+                          {details.fecha_inicio && (
+                            <p>
+                              <strong>Periodo solicitado:</strong>{" "}
+                              {formatFecha(details.fecha_inicio)} al{" "}
+                              {formatFecha(
+                                details.fecha_fin || details.fecha_inicio
+                              )}
+                            </p>
+                          )}
+                          {details.fecha_propuesta_dia_familia && (
+                            <p>
+                              <strong>Fecha alternativa propuesta:</strong>{" "}
+                              {formatFecha(details.fecha_propuesta_dia_familia)}
+                            </p>
+                          )}
+                          {details.justificacion_dia_familia && (
+                            <p>
+                              <strong>Justificación:</strong>{" "}
+                              {details.justificacion_dia_familia}
+                            </p>
+                          )}
+                          {details.cargo_solicitante_familia && (
+                            <p>
+                              <strong>Cargo del solicitante:</strong>{" "}
+                              {details.cargo_solicitante_familia}
+                            </p>
+                          )}
+                          {o.observacion && (
+                            <p>
+                              <strong>Observaciones:</strong> {o.observacion}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      {/* DETALLES DE DÍA DE LA FAMILIA */}
+                      {o.tipo_novedad === "Día de la Familia" && (
+                        <div
+                          className="observaciones-ph-details-group"
+                          style={{
+                            fontSize: "0.9rem",
+                            color: "#334155",
+                            marginTop: "0.5rem",
+                          }}
+                        >
+                          {details.fecha_propuesta_dia_familia && (
+                            <p>
+                              <strong>
+                                Fecha Propuesta para el Día de la Familia:
+                              </strong>{" "}
+                              {formatFecha(details.fecha_propuesta_dia_familia)}
+                            </p>
+                          )}
+                          {details.cargo_solicitante_familia && (
+                            <p>
+                              <strong>Cargo del Solicitante:</strong>{" "}
+                              {details.cargo_solicitante_familia}
+                            </p>
+                          )}
+                          {details.justificacion_dia_familia && (
+                            <p>
+                              <strong>Justificación:</strong>{" "}
+                              {details.justificacion_dia_familia}
+                            </p>
+                          )}
+                          {o.observacion && (
+                            <p>
+                              <strong>Observaciones Adicionales:</strong>{" "}
+                              {o.observacion}
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {/* SECCIÓN DE FIRMAS Y ADJUNTOS */}
+                      <div
+                        className="observaciones-ph-details-group"
+                        style={{ marginTop: "1rem" }}
+                      >
+                        <strong
+                          style={{
+                            display: "block",
+                            marginBottom: "0.5rem",
+                            fontSize: "0.9rem",
+                            color: "#334155",
+                          }}
+                        >
+                          Firmas y Adjuntos:
+                        </strong>
+                        <div
+                          style={{
+                            display: "flex",
+                            flexWrap: "wrap",
+                            gap: "0.5rem",
+                          }}
+                        >
+                          {/* Firma Empleado - CORREGIDO */}
+                          {o.documento_firma_empleado && (
+                            <FileAttachmentChip
+                              url={o.documento_firma_empleado}
+                              label="Firma Empleado"
+                              openPreview={openPreview}
+                            />
+                          )}
+                          {/* Firma Líder - CORREGIDO */}
+                          {o.documento_firma_lider && (
+                            <FileAttachmentChip
+                              url={o.documento_firma_lider}
+                              label="Firma Líder"
+                              openPreview={openPreview}
+                            />
+                          )}
+                          {/* Otros Documentos */}
+                          {o.documento_adjunto && (
+                            <FileAttachmentChip
+                              url={o.documento_adjunto}
+                              label={
+                                o.tipo_novedad ===
+                                "Restricciones/Recomendaciones"
+                                  ? "Documento RR"
+                                  : "Documento General"
+                              }
+                              openPreview={openPreview}
+                            />
+                          )}
+                          {o.documento_incapacidad && (
+                            <FileAttachmentChip
+                              url={o.documento_incapacidad}
+                              label="Incapacidad Médica"
+                              openPreview={openPreview}
+                            />
+                          )}
+                          {o.documento_historia_clinica && (
+                            <FileAttachmentChip
+                              url={o.documento_historia_clinica}
+                              label="Historia Clínica"
+                              openPreview={openPreview}
+                            />
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="observaciones-ph-history-actions">
+                      <button
+                        className="observaciones-ph-btn-action"
+                        onClick={() => handleEdit(o)}
+                      >
+                        <FaPencilAlt /> Editar
+                      </button>
+                      <button
+                        className="observaciones-ph-btn-action observaciones-ph-btn-danger"
+                        onClick={() => handleDelete(o.id)}
+                      >
+                        <FaTrashAlt /> Eliminar
+                      </button>
+                    </div>
                   </div>
-                  <div className="observaciones-ph-history-actions">
-                    <button
-                      className="observaciones-ph-btn-action"
-                      onClick={() => handleEdit(o)}
-                    >
-                      <FaPencilAlt /> Editar
-                    </button>
-                    <button
-                      className="observaciones-ph-btn-action observaciones-ph-btn-danger"
-                      onClick={() => handleDelete(o.id)}
-                    >
-                      <FaTrashAlt /> Eliminar
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-            {totalHistoryPages > 1 && (
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  marginTop: "1.5rem",
-                  gap: "0.75rem",
-                  flexWrap: "wrap",
-                }}
-              >
-                <button
-                  type="button"
-                  className="observaciones-ph-btn-action"
-                  onClick={() =>
-                    setHistoryPage((prev) => Math.max(1, prev - 1))
-                  }
-                  disabled={safeHistoryPage === 1}
-                >
-                  <FaChevronDown style={{ transform: "rotate(90deg)" }} />
-                  Anterior
-                </button>
-                <span
+                );
+              })}
+              {totalHistoryPages > 1 && (
+                <div
                   style={{
-                    fontWeight: 600,
-                    color: "var(--obs-ph-text-secondary)",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginTop: "1.5rem",
+                    gap: "0.75rem",
+                    flexWrap: "wrap",
                   }}
                 >
-                  Página {safeHistoryPage} de {totalHistoryPages}
-                </span>
-                <button
-                  type="button"
-                  className="observaciones-ph-btn-action"
-                  onClick={() =>
-                    setHistoryPage((prev) =>
-                      Math.min(totalHistoryPages, prev + 1)
-                    )
-                  }
-                  disabled={safeHistoryPage === totalHistoryPages}
-                >
-                  Siguiente
-                  <FaChevronDown style={{ transform: "rotate(-90deg)" }} />
-                </button>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="observaciones-ph-message">
-            <FaTimes /> Sin observaciones.
-          </div>
-        )}
+                  <button
+                    type="button"
+                    className="observaciones-ph-btn-action"
+                    onClick={() =>
+                      setHistoryPage((prev) => Math.max(1, prev - 1))
+                    }
+                    disabled={safeHistoryPage === 1}
+                  >
+                    <FaChevronDown style={{ transform: "rotate(90deg)" }} />
+                    Anterior
+                  </button>
+                  <span
+                    style={{
+                      fontWeight: 600,
+                      color: "var(--obs-ph-text-secondary)",
+                    }}
+                  >
+                    Página {safeHistoryPage} de {totalHistoryPages}
+                  </span>
+                  <button
+                    type="button"
+                    className="observaciones-ph-btn-action"
+                    onClick={() =>
+                      setHistoryPage((prev) =>
+                        Math.min(totalHistoryPages, prev + 1)
+                      )
+                    }
+                    disabled={safeHistoryPage === totalHistoryPages}
+                  >
+                    Siguiente
+                    <FaChevronDown style={{ transform: "rotate(-90deg)" }} />
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="observaciones-ph-message">
+              <FaTimes /> Sin observaciones.
+            </div>
+          )}
+        </div>
       </div>
 
       {/* MODAL DE VISTA PREVIA (Se mantiene) */}

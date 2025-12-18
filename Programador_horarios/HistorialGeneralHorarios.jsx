@@ -67,6 +67,20 @@ const fmtFechaLarga = (fecha) => {
   });
 };
 
+const fmtFechaHora = (isoString) => {
+  if (!isoString) return "";
+  const date = new Date(isoString);
+  return date.toLocaleString("es-CO", {
+    timeZone: "America/Bogota",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+};
+
 const formatCurrency = (value) => {
   if (typeof value === "string") {
     const num = value.replace(/[$.]/g, "");
@@ -557,473 +571,469 @@ const HistorialGeneralHorarios = () => {
     }
   };
 
+  // Cálculos para el dashboard informativo
+  const totalEmpleados = allEmpleados.length;
+  const pendientesRevision = allEmpleados.filter(
+    (e) => (employeeStats[e.id]?.observaciones_no_revisadas || 0) > 0
+  ).length;
+  const conObservaciones = allEmpleados.filter(
+    (e) => (employeeStats[e.id]?.total_observaciones || 0) > 0
+  ).length;
+
   return (
     <div className="historial-general-container">
-      <motion.div
-        initial={{ opacity: 0, y: -6 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="historial-general-card"
-      >
-        <div className="historial-general-logo">
-          <FaHistory />
-        </div>
-        <h1 className="historial-general-title">Historial General</h1>
-        <p className="historial-general-subtitle">
-          Consulta el historial de horarios y observaciones de los empleados
-          desde un solo lugar.
-        </p>
-
-        <div className="historial-general-stats-overview">
-          <div className="stats-card">
-            <span className="stats-number">{generalStats.total_empleados}</span>
-            <span className="stats-label">Total Empleados</span>
-          </div>
-          <div className="stats-card success">
-            <span className="stats-number">
-              {generalStats.con_observaciones}
-            </span>
-            <span className="stats-label">Con Historial</span>
-          </div>
-          <div className="stats-card neutral">
-            <span className="stats-number">
-              {generalStats.sin_observaciones}
-            </span>
-            <span className="stats-label">Sin Observaciones</span>
-          </div>
-          <div className="stats-card highlight">
-            <span className="stats-number">
-              {generalStats.con_observaciones_no_revisadas}
-            </span>
-            <span className="stats-label">Pendientes</span>
-          </div>
-        </div>
-
-        <div className="historial-general-search-section">
-          <div className="historial-general-input-wrap">
-            <input
-              type="text"
-              placeholder=" "
-              className="historial-general-input"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              disabled={loadingEmpleados || selectedEmpleado}
-            />
-            <label className="historial-general-label">Cédula o Nombre</label>
-          </div>
-
-          {!selectedEmpleado && (
-            <div className="historial-general-filters">
-              <select
-                className="historial-general-filter-select"
-                value={filterType}
-                onChange={(e) => setFilterType(e.target.value)}
-                disabled={loadingEmpleados}
-              >
-                <option value="all">Todos los empleados</option>
-                <option value="pending-review">
-                  Pendientes de revisión (Nuevas)
-                </option>
-                <option value="has-incapacidades">
-                  Con Incapacidades (Histórico)
-                </option>
-                <option value="with-observations">
-                  Con otras observaciones (Histórico)
-                </option>
-                <option value="without-observations">Sin Observaciones</option>
-              </select>
+      {/* --- Dashboard Informativo --- */}
+      {!selectedEmpleado && (
+        <div className="historial-general-dashboard">
+          <div className="historial-general-stat-card">
+            <div className="stat-icon-wrapper primary">
+              <FaUser />
             </div>
-          )}
+            <div className="stat-content">
+              <span className="stat-value">{totalEmpleados}</span>
+              <span className="stat-label">Total Empleados</span>
+            </div>
+          </div>
+          <div className="historial-general-stat-card">
+            <div className="stat-icon-wrapper warning">
+              <FaClock />
+            </div>
+            <div className="stat-content">
+              <span className="stat-value">{pendientesRevision}</span>
+              <span className="stat-label">Pendientes Revisión</span>
+            </div>
+          </div>
+          <div className="historial-general-stat-card">
+            <div className="stat-icon-wrapper success">
+              <FaClipboardList />
+            </div>
+            <div className="stat-content">
+              <span className="stat-value">{conObservaciones}</span>
+              <span className="stat-label">Con Observaciones</span>
+            </div>
+          </div>
+        </div>
+      )}
 
-          {selectedEmpleado && (
-            <button
-              className="historial-general-btn secondary"
-              onClick={handleChangeEmployee}
-            >
-              <FaTimes /> Cambiar Empleado
-            </button>
-          )}
+      {/* --- Panel Izquierdo: Búsqueda y Lista --- */}
+      <div className="historial-general-search-section">
+        <div className="historial-general-input-wrap">
+          <input
+            type="text"
+            placeholder=" "
+            className="historial-general-input"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            disabled={loadingEmpleados || selectedEmpleado}
+          />
+          <label className="historial-general-label">Cédula o Nombre</label>
         </div>
 
-        <AnimatePresence mode="wait">
-          {!selectedEmpleado ? (
+        {!selectedEmpleado && (
+          <div className="historial-general-filters">
+            <select
+              className="historial-general-filter-select"
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value)}
+              disabled={loadingEmpleados}
+            >
+              <option value="all">Todos los empleados</option>
+              <option value="pending-review">
+                Pendientes de revisión (Nuevas)
+              </option>
+              <option value="has-incapacidades">
+                Con Incapacidades (Histórico)
+              </option>
+              <option value="with-observations">
+                Con otras observaciones (Histórico)
+              </option>
+              <option value="without-observations">Sin Observaciones</option>
+            </select>
+          </div>
+        )}
+
+        {selectedEmpleado && (
+          <button
+            className="historial-general-btn secondary"
+            onClick={handleChangeEmployee}
+          >
+            <FaTimes /> Cambiar Empleado
+          </button>
+        )}
+      </div>
+
+      <AnimatePresence mode="wait">
+        {!selectedEmpleado ? (
+          <motion.div
+            key="table-view"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="historial-general-table-wrapper"
+          >
+            <table className="historial-general-table">
+              <thead>
+                <tr>
+                  <th>Estado</th>
+                  <th>Cédula</th>
+                  <th>Nombre</th>
+                  <th>Observaciones</th>
+                  <th>Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loadingEmpleados ? (
+                  <tr>
+                    <td colSpan="5" className="historial-general-table-cell">
+                      <FaSpinner className="spin" /> Cargando empleados...
+                    </td>
+                  </tr>
+                ) : loadingStats ? (
+                  <tr>
+                    <td colSpan="5" className="historial-general-table-cell">
+                      <FaSpinner className="spin" /> Cargando estadísticas...
+                    </td>
+                  </tr>
+                ) : empleados.length > 0 ? (
+                  empleados.slice(0, visibleEmployees).map((emp) => {
+                    const indicator = getEmployeeIndicator(emp);
+                    const stats = employeeStats[emp.id];
+
+                    return (
+                      <tr key={emp.id} className="employee-row">
+                        <td className="historial-general-table-cell indicator-cell">
+                          {indicator && (
+                            <div
+                              className={`employee-indicator ${indicator.type}`}
+                              title={indicator.tooltip}
+                              style={{ color: indicator.color }}
+                            >
+                              <span className="indicator-icon">
+                                {indicator.icon}
+                              </span>
+                            </div>
+                          )}
+                        </td>
+                        <td className="historial-general-table-cell">
+                          {emp.cedula}
+                        </td>
+                        <td className="historial-general-table-cell employee-name">
+                          {emp.nombre_completo}
+                        </td>
+                        <td className="historial-general-table-cell observations-cell">
+                          {stats ? (
+                            <div className="observations-summary">
+                              {stats.observaciones_no_revisadas > 0 && (
+                                <span
+                                  className="total-count"
+                                  style={{ color: "#f59e0b" }}
+                                >
+                                  {stats.observaciones_no_revisadas} pendientes
+                                </span>
+                              )}
+                              <span className="total-count">
+                                {stats.total_observaciones} en total
+                              </span>
+                              {stats.tipos_novedades.length > 0 && (
+                                <div className="novedad-types">
+                                  {stats.tipos_novedades
+                                    .slice(0, 2)
+                                    .map((tipo) => (
+                                      <span
+                                        key={tipo}
+                                        className="novedad-type-badge"
+                                      >
+                                        {tipo}
+                                      </span>
+                                    ))}
+                                  {stats.tipos_novedades.length > 2 && (
+                                    <span className="more-types">
+                                      +{stats.tipos_novedades.length - 2}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="no-data">Sin datos</span>
+                          )}
+                        </td>
+                        <td className="historial-general-table-cell">
+                          <div className="action-buttons">
+                            <button
+                              className="historial-general-btn-action"
+                              onClick={() => handleSelectEmpleado(emp)}
+                            >
+                              Ver Detalle
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan="5" className="historial-general-table-cell">
+                      {filterType === "all"
+                        ? "No hay empleados activos."
+                        : "No hay empleados que coincidan con el filtro seleccionado."}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+            {empleados.length > visibleEmployees && (
+              <button
+                className="historial-general-btn-action"
+                style={{ width: "100%", marginTop: "1rem" }}
+                onClick={() => setVisibleEmployees((v) => v + 10)}
+              >
+                <FaChevronDown /> Cargar más (
+                {empleados.length - visibleEmployees} restantes)
+              </button>
+            )}
+          </motion.div>
+        ) : (
+          <motion.div
+            key="selected-view"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="historial-general-selected-empleado"
+          >
+            <FaUser />
+            <span>
+              <b>{selectedEmpleado.nombre_completo}</b> (
+              {selectedEmpleado.cedula})
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* --- Panel Derecho: Detalles --- */}
+      <div style={{ marginBottom: "1.5rem" }}>
+        <h1
+          className="historial-general-title"
+          style={{ textAlign: "left", margin: 0 }}
+        >
+          Historial General
+        </h1>
+        <p
+          className="historial-general-subtitle"
+          style={{ textAlign: "left", margin: 0 }}
+        >
+          Consulta y gestiona el historial de horarios y observaciones
+        </p>
+      </div>
+
+      {selectedEmpleado ? (
+        <>
+          <div className="historial-general-tabs">
+            <button
+              className={`historial-general-tab ${
+                activeTab === "horarios" ? "active" : ""
+              }`}
+              onClick={() => setActiveTab("horarios")}
+            >
+              <FaCalendarCheck /> Horarios
+            </button>
+            <button
+              className={`historial-general-tab ${
+                activeTab === "observaciones" ? "active" : ""
+              }`}
+              onClick={() => setActiveTab("observaciones")}
+            >
+              <FaClipboardList /> Observaciones
+            </button>
+          </div>
+
+          {/* TAB CONTENT: HORARIOS */}
+          {activeTab === "horarios" && (
             <motion.div
-              key="table-view"
+              key="horarios-content"
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="historial-general-table-wrapper"
             >
-              <table className="historial-general-table">
-                <thead>
-                  <tr>
-                    <th>Estado</th>
-                    <th>Cédula</th>
-                    <th>Nombre</th>
-                    <th>Observaciones</th>
-                    <th>Acción</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loadingEmpleados ? (
-                    <tr>
-                      <td colSpan="5" className="historial-general-table-cell">
-                        <FaSpinner className="spin" /> Cargando empleados...
-                      </td>
-                    </tr>
-                  ) : loadingStats ? (
-                    <tr>
-                      <td colSpan="5" className="historial-general-table-cell">
-                        <FaSpinner className="spin" /> Cargando estadísticas...
-                      </td>
-                    </tr>
-                  ) : empleados.length > 0 ? (
-                    empleados.slice(0, visibleEmployees).map((emp) => {
-                      const indicator = getEmployeeIndicator(emp);
-                      const stats = employeeStats[emp.id];
+              <div className="historial-general-header">
+                <div className="historial-general-emp">
+                  <FaUser /> <b>{selectedEmpleado?.nombre_completo}</b>
+                </div>
+                <div className="historial-general-summary">
+                  <div className="sum-card legal">
+                    <span>Horas legales</span>
+                    <strong>{formatHoursAndMinutes(resumenGlobal.base)}</strong>
+                  </div>
+                  <div className="sum-card extra">
+                    <span>Horas extra</span>
+                    <strong>
+                      {formatHoursAndMinutes(resumenGlobal.extra)}
+                    </strong>
+                  </div>
+                  <div className="sum-card total">
+                    <span>Total</span>
+                    <strong>
+                      {formatHoursAndMinutes(resumenGlobal.total)}
+                    </strong>
+                  </div>
+                  <div className="sum-card dias">
+                    <span>Días trabajados</span>
+                    <strong>{resumenGlobal.diasTrab}</strong>
+                  </div>
+                </div>
+              </div>
 
-                      return (
-                        <tr key={emp.id} className="employee-row">
-                          <td className="historial-general-table-cell indicator-cell">
-                            {indicator && (
-                              <div
-                                className={`employee-indicator ${indicator.type}`}
-                                title={indicator.tooltip}
-                                style={{ color: indicator.color }}
-                              >
-                                <span className="indicator-icon">
-                                  {indicator.icon}
-                                </span>
-                              </div>
-                            )}
-                          </td>
-                          <td className="historial-general-table-cell">
-                            {emp.cedula}
-                          </td>
-                          <td className="historial-general-table-cell employee-name">
-                            {emp.nombre_completo}
-                          </td>
-                          <td className="historial-general-table-cell observations-cell">
-                            {stats ? (
-                              <div className="observations-summary">
-                                {stats.observaciones_no_revisadas > 0 && (
-                                  <span
-                                    className="total-count"
-                                    style={{ color: "#f59e0b" }}
-                                  >
-                                    {stats.observaciones_no_revisadas}{" "}
-                                    pendientes
-                                  </span>
-                                )}
-                                <span className="total-count">
-                                  {stats.total_observaciones} en total
-                                </span>
-                                {stats.tipos_novedades.length > 0 && (
-                                  <div className="novedad-types">
-                                    {stats.tipos_novedades
-                                      .slice(0, 2)
-                                      .map((tipo) => (
-                                        <span
-                                          key={tipo}
-                                          className="novedad-type-badge"
-                                        >
-                                          {tipo}
-                                        </span>
-                                      ))}
-                                    {stats.tipos_novedades.length > 2 && (
-                                      <span className="more-types">
-                                        +{stats.tipos_novedades.length - 2}
-                                      </span>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            ) : (
-                              <span className="no-data">Sin datos</span>
-                            )}
-                          </td>
-                          <td className="historial-general-table-cell">
-                            <div className="action-buttons">
-                              <button
-                                className="historial-general-btn-action"
-                                onClick={() => handleSelectEmpleado(emp)}
-                              >
-                                Ver Detalle
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  ) : (
-                    <tr>
-                      <td colSpan="5" className="historial-general-table-cell">
-                        {filterType === "all"
-                          ? "No hay empleados activos."
-                          : "No hay empleados que coincidan con el filtro seleccionado."}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-              {empleados.length > visibleEmployees && (
+              <div className="historial-general-date-filter">
+                <div className="date-filter-group">
+                  <label>
+                    <FaFilter /> Desde
+                  </label>
+                  <input
+                    type="date"
+                    value={dateRange.from}
+                    max={dateRange.to || undefined}
+                    onChange={(e) => handleDateChange("from", e.target.value)}
+                  />
+                </div>
+                <div className="date-filter-group">
+                  <label>Hasta</label>
+                  <input
+                    type="date"
+                    value={dateRange.to}
+                    min={dateRange.from || undefined}
+                    onChange={(e) => handleDateChange("to", e.target.value)}
+                  />
+                </div>
                 <button
-                  className="historial-general-btn-action"
-                  style={{ width: "100%", marginTop: "1rem" }}
-                  onClick={() => setVisibleEmployees((v) => v + 10)}
+                  type="button"
+                  className="historial-general-btn-tertiary"
+                  onClick={resetDateRange}
+                  disabled={!isRangeActive}
                 >
-                  <FaChevronDown /> Cargar más (
-                  {empleados.length - visibleEmployees} restantes)
+                  <FaTimes /> Limpiar filtro
                 </button>
+              </div>
+
+              {filterSummary && (
+                <div className="historial-general-filter-summary">
+                  <span className="filter-count">
+                    {filterSummary.totalDays}{" "}
+                    {filterSummary.totalDays === 1 ? "día" : "días"}
+                  </span>
+                  <span>
+                    en {filterSummary.totalWeeks}{" "}
+                    {filterSummary.totalWeeks === 1 ? "semana" : "semanas"}
+                    {filterSummary.label ? ` ${filterSummary.label}` : ""}
+                  </span>
+                </div>
               )}
-            </motion.div>
-          ) : (
-            <motion.div
-              key="selected-view"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="historial-general-selected-empleado"
-            >
-              <FaUser />
-              <span>
-                <b>{selectedEmpleado.nombre_completo}</b> (
-                {selectedEmpleado.cedula})
-              </span>
-            </motion.div>
-          )}
-        </AnimatePresence>
 
-        {selectedEmpleado && (
-          <>
-            <div className="historial-general-tabs">
-              <button
-                className={`historial-general-tab ${
-                  activeTab === "horarios" ? "active" : ""
-                }`}
-                onClick={() => setActiveTab("horarios")}
-              >
-                <FaCalendarCheck /> Horarios
-              </button>
-              <button
-                className={`historial-general-tab ${
-                  activeTab === "observaciones" ? "active" : ""
-                }`}
-                onClick={() => setActiveTab("observaciones")}
-              >
-                <FaClipboardList /> Observaciones
-              </button>
-            </div>
+              <hr className="separator" />
 
-            {/* TAB CONTENT: HORARIOS */}
-            {activeTab === "horarios" && (
-              <motion.div
-                key="horarios-content"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-              >
-                <div className="historial-general-header">
-                  <div className="historial-general-emp">
-                    <FaUser /> <b>{selectedEmpleado?.nombre_completo}</b>
+              <div className="historial-general-weekly-list">
+                <h2 className="historial-general-weekly-title">
+                  <FaCalendarCheck /> Detalle por Semanas
+                </h2>
+
+                {loadingHorarios ? (
+                  <div className="historial-general-msg">
+                    <FaSpinner className="spin" /> Cargando horarios...
                   </div>
-                  <div className="historial-general-summary">
-                    <div className="sum-card legal">
-                      <span>Horas legales</span>
-                      <strong>
-                        {formatHoursAndMinutes(resumenGlobal.base)}
-                      </strong>
-                    </div>
-                    <div className="sum-card extra">
-                      <span>Horas extra</span>
-                      <strong>
-                        {formatHoursAndMinutes(resumenGlobal.extra)}
-                      </strong>
-                    </div>
-                    <div className="sum-card total">
-                      <span>Total</span>
-                      <strong>
-                        {formatHoursAndMinutes(resumenGlobal.total)}
-                      </strong>
-                    </div>
-                    <div className="sum-card dias">
-                      <span>Días trabajados</span>
-                      <strong>{resumenGlobal.diasTrab}</strong>
-                    </div>
+                ) : horarios.length === 0 ? (
+                  <div className="historial-general-msg">
+                    <FaTimes /> No hay horarios registrados para este empleado.
                   </div>
-                </div>
-
-                <div className="historial-general-date-filter">
-                  <div className="date-filter-group">
-                    <label>
-                      <FaFilter /> Desde
-                    </label>
-                    <input
-                      type="date"
-                      value={dateRange.from}
-                      max={dateRange.to || undefined}
-                      onChange={(e) => handleDateChange("from", e.target.value)}
-                    />
+                ) : filteredHorarios.length === 0 ? (
+                  <div className="historial-general-msg">
+                    <FaFilter /> No hay horarios dentro del rango seleccionado.
                   </div>
-                  <div className="date-filter-group">
-                    <label>Hasta</label>
-                    <input
-                      type="date"
-                      value={dateRange.to}
-                      min={dateRange.from || undefined}
-                      onChange={(e) => handleDateChange("to", e.target.value)}
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    className="historial-general-btn-tertiary"
-                    onClick={resetDateRange}
-                    disabled={!isRangeActive}
-                  >
-                    <FaTimes /> Limpiar filtro
-                  </button>
-                </div>
-
-                {filterSummary && (
-                  <div className="historial-general-filter-summary">
-                    <span className="filter-count">
-                      {filterSummary.totalDays}{" "}
-                      {filterSummary.totalDays === 1 ? "día" : "días"}
-                    </span>
-                    <span>
-                      en {filterSummary.totalWeeks}{" "}
-                      {filterSummary.totalWeeks === 1 ? "semana" : "semanas"}
-                      {filterSummary.label ? ` ${filterSummary.label}` : ""}
-                    </span>
-                  </div>
-                )}
-
-                <hr className="separator" />
-
-                <div className="historial-general-weekly-list">
-                  <h2 className="historial-general-weekly-title">
-                    <FaCalendarCheck /> Detalle por Semanas
-                  </h2>
-
-                  {loadingHorarios ? (
-                    <div className="historial-general-msg">
-                      <FaSpinner className="spin" /> Cargando horarios...
-                    </div>
-                  ) : horarios.length === 0 ? (
-                    <div className="historial-general-msg">
-                      <FaTimes /> No hay horarios registrados para este
-                      empleado.
-                    </div>
-                  ) : filteredHorarios.length === 0 ? (
-                    <div className="historial-general-msg">
-                      <FaFilter /> No hay horarios dentro del rango
-                      seleccionado.
-                    </div>
-                  ) : (
-                    filteredHorarios.map((week) => (
-                      <motion.div
-                        key={week.id}
-                        className="weekly-item"
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.2 }}
+                ) : (
+                  filteredHorarios.map((week) => (
+                    <motion.div
+                      key={week.id}
+                      className="weekly-item"
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <div
+                        className="weekly-header"
+                        onClick={() => toggleWeek(week.id)}
                       >
-                        <div
-                          className="weekly-header"
-                          onClick={() => toggleWeek(week.id)}
-                        >
-                          <div className="week-info">
-                            <span className="week-date">
-                              {fmtFechaLarga(week.fecha_inicio)} -{" "}
-                              {fmtFechaLarga(week.fecha_fin)}
-                              {week.estado_visibilidad === "archivado" && (
-                                <span className="archived-badge">
-                                  Archivado
-                                </span>
-                              )}
-                            </span>
-                            <span className="historial-general-week-creator">
-                              <FaUser /> Creado por:{" "}
-                              <strong>{getWeekCreatorLabel(week)}</strong>
-                            </span>
-                          </div>
-                          <div className="week-summary">
-                            <div className="week-total-hours">
-                              <FaCircle className="dot" />{" "}
-                              {formatHoursAndMinutes(week.total_horas_semana)}{" "}
-                              en total
-                            </div>
-                            <span className="toggle-icon">
-                              {openWeek === week.id ? (
-                                <FaChevronUp />
-                              ) : (
-                                <FaChevronDown />
-                              )}
-                            </span>
-                          </div>
+                        <div className="week-info">
+                          <span className="week-date">
+                            {fmtFechaLarga(week.fecha_inicio)} -{" "}
+                            {fmtFechaLarga(week.fecha_fin)}
+                            {week.estado_visibilidad === "archivado" && (
+                              <span className="archived-badge">Archivado</span>
+                            )}
+                          </span>
+                          <span className="historial-general-week-creator">
+                            <FaUser /> Creado por:{" "}
+                            <strong>{getWeekCreatorLabel(week)}</strong>
+                          </span>
                         </div>
+                        <div className="week-summary">
+                          <div className="week-total-hours">
+                            <FaCircle className="dot" />{" "}
+                            {formatHoursAndMinutes(week.total_horas_semana)} en
+                            total
+                          </div>
+                          <span className="toggle-icon">
+                            {openWeek === week.id ? (
+                              <FaChevronUp />
+                            ) : (
+                              <FaChevronDown />
+                            )}
+                          </span>
+                        </div>
+                      </div>
 
-                        <AnimatePresence>
-                          {openWeek === week.id && (
-                            <motion.div
-                              className="weekly-details"
-                              initial={{ opacity: 0, height: 0 }}
-                              animate={{ opacity: 1, height: "auto" }}
-                              exit={{ opacity: 0, height: 0 }}
-                              transition={{ duration: 0.3 }}
-                            >
-                              <div className="days-grid">
-                                {week.dias.map((d) => (
-                                  <div key={d.fecha} className="day-card">
-                                    <div className="day-header">
-                                      <span className="day-name">
-                                        {d.descripcion}
-                                      </span>
-                                      <span className="day-date">
-                                        {fmtFechaLarga(d.fecha)}
-                                      </span>
-                                    </div>
-                                    <div className="day-content">
-                                      {getDomingoStatus(d) ? (
-                                        <div className="sunday-status">
-                                          <FaInfoCircle /> Domingo:{" "}
-                                          <strong
-                                            className={`status-${d.domingo_estado}`}
-                                          >
-                                            {getDomingoStatus(d)}
-                                          </strong>
-                                        </div>
-                                      ) : (
-                                        <>
-                                          {d.jornada_reducida && (
-                                            <div className="reduced-day-info">
-                                              <span className="badge reduced">
-                                                Jornada reducida (9h/6h)
+                      <AnimatePresence>
+                        {openWeek === week.id && (
+                          <motion.div
+                            className="weekly-details"
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: "auto" }}
+                            exit={{ opacity: 0, height: 0 }}
+                            transition={{ duration: 0.3 }}
+                          >
+                            <div className="days-grid">
+                              {week.dias.map((d) => (
+                                <div key={d.fecha} className="day-card">
+                                  <div className="day-header">
+                                    <span className="day-name">
+                                      {d.descripcion}
+                                    </span>
+                                    <span className="day-date">
+                                      {fmtFechaLarga(d.fecha)}
+                                    </span>
+                                  </div>
+                                  <div className="day-content">
+                                    {getDomingoStatus(d) ? (
+                                      <div className="sunday-status">
+                                        <FaInfoCircle /> Domingo:{" "}
+                                        <strong
+                                          className={`status-${d.domingo_estado}`}
+                                        >
+                                          {getDomingoStatus(d)}
+                                        </strong>
+                                      </div>
+                                    ) : (
+                                      <>
+                                        {d.jornada_reducida && (
+                                          <div className="reduced-day-info">
+                                            <span className="badge reduced">
+                                              Jornada reducida (9h/6h)
+                                            </span>
+                                            {d.tipo_jornada_reducida && (
+                                              <span className="badge reduced-type">
+                                                {d.tipo_jornada_reducida ===
+                                                "entrar-tarde"
+                                                  ? "Entra 1 hora tarde"
+                                                  : "Sale 1 hora antes"}
                                               </span>
-                                              {d.tipo_jornada_reducida && (
-                                                <span className="badge reduced-type">
-                                                  {d.tipo_jornada_reducida ===
-                                                  "entrar-tarde"
-                                                    ? "Entra 1 hora tarde"
-                                                    : "Sale 1 hora antes"}
-                                                </span>
-                                              )}
-                                              <div className="hours-badges">
-                                                <span className="badge legal">
-                                                  {formatHoursAndMinutes(
-                                                    d.horas_base
-                                                  )}{" "}
-                                                  Legales
-                                                </span>
-                                                <span className="badge extra">
-                                                  {formatHoursAndMinutes(
-                                                    d.horas_extra
-                                                  )}{" "}
-                                                  Extras
-                                                </span>
-                                              </div>
-                                            </div>
-                                          )}
-                                          {!d.jornada_reducida && (
+                                            )}
                                             <div className="hours-badges">
                                               <span className="badge legal">
                                                 {formatHoursAndMinutes(
@@ -1038,125 +1048,192 @@ const HistorialGeneralHorarios = () => {
                                                 Extras
                                               </span>
                                             </div>
-                                          )}
-                                          {d.bloques &&
-                                            d.bloques.length > 0 && (
-                                              <div className="blocks-section">
-                                                <h4 className="blocks-title">
-                                                  Jornada:
-                                                </h4>
-                                                <ul className="time-blocks">
-                                                  {addBreaksToBlocks(
-                                                    d.bloques,
-                                                    d.descripcion
-                                                  ).map((b, idx) => (
-                                                    <li
-                                                      key={idx}
-                                                      className={`${b.type}-item`}
-                                                    >
-                                                      {b.type === "work" ? (
-                                                        <FaClock className="block-icon" />
-                                                      ) : b.desc ===
-                                                        "Almuerzo" ? (
-                                                        <FaUtensils className="break-icon" />
-                                                      ) : (
-                                                        <FaCoffee className="break-icon" />
-                                                      )}
-                                                      <span className="block-time">
-                                                        {b.start} - {b.end}
-                                                      </span>
-                                                      <span className="block-desc">
-                                                        {b.type === "work"
-                                                          ? `(${formatHoursAndMinutes(
-                                                              b.hours
-                                                            )})`
-                                                          : `Descanso: ${b.desc}`}
-                                                      </span>
-                                                    </li>
-                                                  ))}
-                                                </ul>
-                                              </div>
-                                            )}
-                                        </>
-                                      )}
-                                    </div>
+                                          </div>
+                                        )}
+                                        {!d.jornada_reducida && (
+                                          <div className="hours-badges">
+                                            <span className="badge legal">
+                                              {formatHoursAndMinutes(
+                                                d.horas_base
+                                              )}{" "}
+                                              Legales
+                                            </span>
+                                            <span className="badge extra">
+                                              {formatHoursAndMinutes(
+                                                d.horas_extra
+                                              )}{" "}
+                                              Extras
+                                            </span>
+                                          </div>
+                                        )}
+                                        {d.bloques && d.bloques.length > 0 && (
+                                          <div className="blocks-section">
+                                            <h4 className="blocks-title">
+                                              Jornada:
+                                            </h4>
+                                            <ul className="time-blocks">
+                                              {addBreaksToBlocks(
+                                                d.bloques,
+                                                d.descripcion
+                                              ).map((b, idx) => (
+                                                <li
+                                                  key={idx}
+                                                  className={`${b.type}-item`}
+                                                >
+                                                  {b.type === "work" ? (
+                                                    <FaClock className="block-icon" />
+                                                  ) : b.desc === "Almuerzo" ? (
+                                                    <FaUtensils className="break-icon" />
+                                                  ) : (
+                                                    <FaCoffee className="break-icon" />
+                                                  )}
+                                                  <span className="block-time">
+                                                    {b.start} - {b.end}
+                                                  </span>
+                                                  <span className="block-desc">
+                                                    {b.type === "work"
+                                                      ? `(${formatHoursAndMinutes(
+                                                          b.hours
+                                                        )})`
+                                                      : `Descanso: ${b.desc}`}
+                                                  </span>
+                                                </li>
+                                              ))}
+                                            </ul>
+                                          </div>
+                                        )}
+                                      </>
+                                    )}
                                   </div>
-                                ))}
-                              </div>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
-                      </motion.div>
-                    ))
-                  )}
-                </div>
-              </motion.div>
-            )}
+                                </div>
+                              ))}
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </motion.div>
+                  ))
+                )}
+              </div>
+            </motion.div>
+          )}
 
-            {/* TAB CONTENT: OBSERVACIONES */}
-            {activeTab === "observaciones" && (
-              <motion.div
-                key="observaciones-content"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="historial-general-observaciones-section"
-              >
-                <div className="historial-general-observaciones-list">
-                  <div className="observaciones-header-section">
-                    <h2 className="historial-general-weekly-title">
-                      <FaHistory /> Historial de Observaciones
-                    </h2>
-                    {employeeStats[selectedEmpleado.id]
-                      ?.observaciones_no_revisadas > 0 &&
-                      isHR && (
-                        <button
-                          className="historial-general-btn-action mark-reviewed-internal"
-                          onClick={handleMarkAsReviewed}
-                          style={{
-                            alignSelf: "flex-start",
-                            marginBottom: "1rem",
-                          }}
-                        >
-                          <FaCheckCircle /> Marcar pendientes como revisadas
-                        </button>
-                      )}
-                  </div>
-
-                  <p className="historial-general-info-note">
-                    <FaInfoCircle /> Esta es una vista de solo consulta. Para
-                    crear o editar observaciones, use la sección
-                    "Observaciones".
-                  </p>
-
-                  <AnimatePresence mode="wait">
-                    {loadingObservaciones ? (
-                      <div className="historial-general-msg">
-                        <FaSpinner className="spin" /> Cargando observaciones...
-                      </div>
-                    ) : observacionesHistory.length > 0 ? (
-                      <motion.div
-                        key="observaciones-list"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
+          {/* TAB CONTENT: OBSERVACIONES */}
+          {activeTab === "observaciones" && (
+            <motion.div
+              key="observaciones-content"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="historial-general-observaciones-section"
+            >
+              <div className="historial-general-observaciones-list">
+                <div className="observaciones-header-section">
+                  <h2 className="historial-general-weekly-title">
+                    <FaHistory /> Historial de Observaciones
+                  </h2>
+                  {employeeStats[selectedEmpleado.id]
+                    ?.observaciones_no_revisadas > 0 &&
+                    isHR && (
+                      <button
+                        className="historial-general-btn-action mark-reviewed-internal"
+                        onClick={handleMarkAsReviewed}
+                        style={{
+                          alignSelf: "flex-start",
+                          marginBottom: "1rem",
+                        }}
                       >
-                        {observacionesHistory.map((o) => {
-                          const details = o.details || {};
+                        <FaCheckCircle /> Marcar pendientes como revisadas
+                      </button>
+                    )}
+                </div>
 
-                          return (
-                            <motion.div
-                              key={o.id}
-                              initial={{ opacity: 0, y: 10 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              className={`historial-general-observacion-card historial-general-observacion-readonly ${
-                                !o.revisada ? "not-reviewed" : ""
-                              }`}
+                <p className="historial-general-info-note">
+                  <FaInfoCircle /> Esta es una vista de solo consulta. Para
+                  crear o editar observaciones, use la sección "Observaciones".
+                </p>
+
+                <AnimatePresence mode="wait">
+                  {loadingObservaciones ? (
+                    <div className="historial-general-msg">
+                      <FaSpinner className="spin" /> Cargando observaciones...
+                    </div>
+                  ) : observacionesHistory.length > 0 ? (
+                    <motion.div
+                      key="observaciones-list"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                    >
+                      {observacionesHistory.map((o) => {
+                        const details = o.details || {};
+
+                        return (
+                          <motion.div
+                            key={o.id}
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className={`historial-general-observacion-card historial-general-observacion-readonly ${
+                              !o.revisada ? "not-reviewed" : ""
+                            }`}
+                          >
+                            <div
+                              className="historial-general-observacion-header"
+                              style={{ alignItems: "flex-start" }}
                             >
-                              <div className="historial-general-observacion-header">
+                              <div
+                                style={{
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  gap: "0.2rem",
+                                }}
+                              >
                                 <span className="historial-general-observacion-date">
                                   {fmtFechaLarga(o.fecha_novedad)}
                                 </span>
+                                {o.fecha_creacion && (
+                                  <span
+                                    style={{
+                                      fontSize: "0.75rem",
+                                      color: "#64748b",
+                                    }}
+                                  >
+                                    <FaClock
+                                      style={{
+                                        marginRight: "4px",
+                                        fontSize: "0.7rem",
+                                      }}
+                                    />
+                                    {fmtFechaHora(o.fecha_creacion)}
+                                  </span>
+                                )}
+                                {(details.creado_por_nombre ||
+                                  details.creado_por_email) && (
+                                  <span
+                                    style={{
+                                      fontSize: "0.75rem",
+                                      color: "#64748b",
+                                    }}
+                                  >
+                                    <FaUser
+                                      style={{
+                                        marginRight: "4px",
+                                        fontSize: "0.7rem",
+                                      }}
+                                    />
+                                    {details.creado_por_nombre ||
+                                      details.creado_por_email}
+                                  </span>
+                                )}
+                              </div>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  alignItems: "flex-end",
+                                  gap: "0.5rem",
+                                }}
+                              >
                                 {o.revisada ? (
                                   <span className="historial-general-observacion-revisada-badge">
                                     Revisada
@@ -1170,409 +1247,424 @@ const HistorialGeneralHorarios = () => {
                                   {o.tipo_novedad}
                                 </span>
                               </div>
-                              <div className="historial-general-observacion-summary">
-                                {/* Lógica para no duplicar el motivo */}
-                                {o.tipo_novedad !== "Licencias" &&
-                                  o.tipo_novedad !== "Préstamos" &&
-                                  o.tipo_novedad !== "Permisos" &&
-                                  o.tipo_novedad !== "Día de la Familia" &&
-                                  o.observacion && (
-                                    <p style={{ marginBottom: "0.5rem" }}>
-                                      {o.observacion}
-                                    </p>
-                                  )}
+                            </div>
+                            <div className="historial-general-observacion-summary">
+                              {/* Lógica para no duplicar el motivo */}
+                              {o.tipo_novedad !== "Licencias" &&
+                                o.tipo_novedad !== "Préstamos" &&
+                                o.tipo_novedad !== "Permisos" &&
+                                o.tipo_novedad !== "Día de la Familia" &&
+                                o.observacion && (
+                                  <p style={{ marginBottom: "0.5rem" }}>
+                                    {o.observacion}
+                                  </p>
+                                )}
 
-                                {/* MOSTRAR DETALLES DE NOVEDAD USANDO details */}
-                                {(() => {
-                                  const baseStyle = {
-                                    fontSize: "0.9rem",
-                                    color: "#334155",
-                                    marginTop: "0.5rem",
-                                  };
+                              {/* MOSTRAR DETALLES DE NOVEDAD USANDO details */}
+                              {(() => {
+                                const baseStyle = {
+                                  fontSize: "0.9rem",
+                                  color: "#334155",
+                                  marginTop: "0.5rem",
+                                };
 
-                                  if (o.tipo_novedad === "Licencias") {
-                                    return (
-                                      <div
-                                        className="observaciones-ph-details-group"
-                                        style={baseStyle}
-                                      >
+                                if (o.tipo_novedad === "Licencias") {
+                                  return (
+                                    <div
+                                      className="observaciones-ph-details-group"
+                                      style={baseStyle}
+                                    >
+                                      <p>
+                                        <strong>Tipo:</strong>{" "}
+                                        {details.sub_tipo_novedad}
+                                      </p>
+                                      <p>
+                                        <strong>Duración:</strong>{" "}
+                                        {details.duracion_dias || "0"} días
+                                      </p>
+                                      <p>
+                                        <strong>Periodo:</strong>{" "}
+                                        {fmtFechaLarga(details.fecha_inicio)} al{" "}
+                                        {fmtFechaLarga(details.fecha_termino)}
+                                      </p>
+                                      <p>
+                                        <strong>Motivo (Descripción):</strong>{" "}
+                                        {o.observacion || "N/A"}
+                                      </p>
+                                      <p>
+                                        <strong>Aprobación:</strong>{" "}
+                                        {details.lider_aprueba || "N/A"} -{" "}
+                                        {details.fecha_aprobacion
+                                          ? fmtFechaLarga(
+                                              details.fecha_aprobacion
+                                            )
+                                          : "Pendiente"}
+                                      </p>
+                                    </div>
+                                  );
+                                }
+                                if (o.tipo_novedad === "Préstamos") {
+                                  return (
+                                    <div
+                                      className="observaciones-ph-details-group"
+                                      style={baseStyle}
+                                    >
+                                      <p>
+                                        <strong>Monto Solicitado:</strong>{" "}
+                                        {formatCurrency(
+                                          details.monto_solicitado
+                                        )}
+                                      </p>
+                                      <p>
+                                        <strong>Cuotas:</strong>{" "}
+                                        {details.numero_cuotas || "N/A"}
+                                      </p>
+                                      <p>
+                                        <strong>Motivo:</strong> {o.observacion}
+                                      </p>
+                                      {(details.revisado_jefe ||
+                                        details.aprobado_gh ||
+                                        details.contabilizado_tesoreria) && (
                                         <p>
-                                          <strong>Tipo:</strong>{" "}
-                                          {details.sub_tipo_novedad}
+                                          <strong>Aprobación:</strong> Jefe (
+                                          {details.revisado_jefe || "N/A"}) | GH
+                                          ({details.aprobado_gh || "N/A"}) |
+                                          Tesorería (
+                                          {details.contabilizado_tesoreria ||
+                                            "N/A"}
+                                          )
                                         </p>
+                                      )}
+                                    </div>
+                                  );
+                                }
+                                if (o.tipo_novedad === "Vacaciones") {
+                                  return (
+                                    <div
+                                      className="observaciones-ph-details-group"
+                                      style={baseStyle}
+                                    >
+                                      <p>
+                                        <strong>Período Año:</strong>{" "}
+                                        {details.periodo_vacacional_ano ||
+                                          "N/A"}
+                                      </p>
+                                      <p>
+                                        <strong>Inicio/Fin:</strong>{" "}
+                                        {fmtFechaLarga(
+                                          details.fecha_inicio_vacaciones
+                                        )}{" "}
+                                        al{" "}
+                                        {fmtFechaLarga(
+                                          details.fecha_fin_vacaciones
+                                        )}
+                                      </p>
+                                      <p>
+                                        <strong>Regreso:</strong>{" "}
+                                        {fmtFechaLarga(
+                                          details.fecha_regreso_vacaciones
+                                        )}
+                                      </p>
+                                    </div>
+                                  );
+                                }
+                                if (o.tipo_novedad === "Incapacidades") {
+                                  return (
+                                    <div
+                                      className="observaciones-ph-details-group"
+                                      style={baseStyle}
+                                    >
+                                      <p>
+                                        <strong>Tipo Incap.:</strong>{" "}
+                                        {details.tipoIncapacidad}
+                                      </p>
+                                      {details.diasIncapacidad && (
                                         <p>
                                           <strong>Duración:</strong>{" "}
-                                          {details.duracion_dias || "0"} días
+                                          {details.diasIncapacidad}
                                         </p>
-                                        <p>
-                                          <strong>Periodo:</strong>{" "}
-                                          {fmtFechaLarga(details.fecha_inicio)}{" "}
-                                          al{" "}
-                                          {fmtFechaLarga(details.fecha_termino)}
-                                        </p>
-                                        <p>
-                                          <strong>Motivo (Descripción):</strong>{" "}
-                                          {o.observacion || "N/A"}
-                                        </p>
-                                        <p>
-                                          <strong>Aprobación:</strong>{" "}
-                                          {details.lider_aprueba || "N/A"} -{" "}
-                                          {details.fecha_aprobacion
-                                            ? fmtFechaLarga(
-                                                details.fecha_aprobacion
+                                      )}
+                                    </div>
+                                  );
+                                }
+                                if (o.tipo_novedad === "Estudio") {
+                                  return (
+                                    <div
+                                      className="observaciones-ph-details-group"
+                                      style={baseStyle}
+                                    >
+                                      <p>
+                                        <strong>Motivo:</strong> {o.observacion}
+                                      </p>
+                                      {details.dias_estudio &&
+                                      details.dias_estudio.length > 0 ? (
+                                        <div style={{ marginTop: "0.5rem" }}>
+                                          <strong>Días y Horarios:</strong>
+                                          <ul
+                                            style={{
+                                              paddingLeft: "1.2rem",
+                                              marginTop: "0.2rem",
+                                              marginBottom: "0.5rem",
+                                            }}
+                                          >
+                                            {details.dias_estudio.map(
+                                              (dia, idx) => (
+                                                <li key={idx}>
+                                                  {fmtFechaLarga(dia.fecha)}:{" "}
+                                                  {dia.inicio} - {dia.fin}
+                                                </li>
                                               )
-                                            : "Pendiente"}
-                                        </p>
-                                      </div>
-                                    );
-                                  }
-                                  if (o.tipo_novedad === "Préstamos") {
-                                    return (
-                                      <div
-                                        className="observaciones-ph-details-group"
-                                        style={baseStyle}
-                                      >
-                                        <p>
-                                          <strong>Monto Solicitado:</strong>{" "}
-                                          {formatCurrency(
-                                            details.monto_solicitado
-                                          )}
-                                        </p>
-                                        <p>
-                                          <strong>Cuotas:</strong>{" "}
-                                          {details.numero_cuotas || "N/A"}
-                                        </p>
-                                        <p>
-                                          <strong>Motivo:</strong>{" "}
-                                          {o.observacion}
-                                        </p>
-                                        {(details.revisado_jefe ||
-                                          details.aprobado_gh ||
-                                          details.contabilizado_tesoreria) && (
-                                          <p>
-                                            <strong>Aprobación:</strong> Jefe (
-                                            {details.revisado_jefe || "N/A"}) |
-                                            GH ({details.aprobado_gh || "N/A"})
-                                            | Tesorería (
-                                            {details.contabilizado_tesoreria ||
-                                              "N/A"}
-                                            )
-                                          </p>
-                                        )}
-                                      </div>
-                                    );
-                                  }
-                                  if (o.tipo_novedad === "Vacaciones") {
-                                    return (
-                                      <div
-                                        className="observaciones-ph-details-group"
-                                        style={baseStyle}
-                                      >
-                                        <p>
-                                          <strong>Período Año:</strong>{" "}
-                                          {details.periodo_vacacional_ano ||
-                                            "N/A"}
-                                        </p>
-                                        <p>
-                                          <strong>Inicio/Fin:</strong>{" "}
-                                          {fmtFechaLarga(
-                                            details.fecha_inicio_vacaciones
-                                          )}{" "}
-                                          al{" "}
-                                          {fmtFechaLarga(
-                                            details.fecha_fin_vacaciones
-                                          )}
-                                        </p>
-                                        <p>
-                                          <strong>Regreso:</strong>{" "}
-                                          {fmtFechaLarga(
-                                            details.fecha_regreso_vacaciones
-                                          )}
-                                        </p>
-                                      </div>
-                                    );
-                                  }
-                                  if (o.tipo_novedad === "Incapacidades") {
-                                    return (
-                                      <div
-                                        className="observaciones-ph-details-group"
-                                        style={baseStyle}
-                                      >
-                                        <p>
-                                          <strong>Tipo Incap.:</strong>{" "}
-                                          {details.tipoIncapacidad}
-                                        </p>
-                                        {details.diasIncapacidad && (
-                                          <p>
-                                            <strong>Duración:</strong>{" "}
-                                            {details.diasIncapacidad}
-                                          </p>
-                                        )}
-                                      </div>
-                                    );
-                                  }
-                                  if (o.tipo_novedad === "Estudio") {
-                                    return (
-                                      <div
-                                        className="observaciones-ph-details-group"
-                                        style={baseStyle}
-                                      >
-                                        <p>
-                                          <strong>Motivo:</strong>{" "}
-                                          {o.observacion}
-                                        </p>
-                                        {details.dias_estudio &&
-                                        details.dias_estudio.length > 0 ? (
-                                          <div style={{ marginTop: "0.5rem" }}>
-                                            <strong>Días y Horarios:</strong>
-                                            <ul
-                                              style={{
-                                                paddingLeft: "1.2rem",
-                                                marginTop: "0.2rem",
-                                                marginBottom: "0.5rem",
-                                              }}
-                                            >
-                                              {details.dias_estudio.map(
-                                                (dia, idx) => (
-                                                  <li key={idx}>
-                                                    {fmtFechaLarga(dia.fecha)}:{" "}
-                                                    {dia.inicio} - {dia.fin}
-                                                  </li>
-                                                )
-                                              )}
-                                            </ul>
-                                          </div>
-                                        ) : (
-                                          details.horarioEstudio && (
-                                            <p>
-                                              <strong>Horario:</strong>{" "}
-                                              {details.horarioEstudio}
-                                            </p>
-                                          )
-                                        )}
-                                      </div>
-                                    );
-                                  }
-                                  if (o.tipo_novedad === "Permisos") {
-                                    return (
-                                      <div
-                                        className="observaciones-ph-details-group"
-                                        style={baseStyle}
-                                      >
-                                        <p>
-                                          <strong>Motivo:</strong>{" "}
-                                          {o.observacion || "N/A"}
-                                        </p>
-                                      </div>
-                                    );
-                                  }
-                                  if (
-                                    o.tipo_novedad ===
-                                    "Restricciones/Recomendaciones"
-                                  ) {
-                                    return (
-                                      <div
-                                        className="observaciones-ph-details-group"
-                                        style={baseStyle}
-                                      >
-                                        <p>
-                                          <strong>Detalles:</strong>{" "}
-                                          {o.observacion}
-                                        </p>
-                                      </div>
-                                    );
-                                  }
-                                  if (o.tipo_novedad === "Día de la Familia") {
-                                    return (
-                                      <div
-                                        className="observaciones-ph-details-group"
-                                        style={baseStyle}
-                                      >
-                                        {details.fecha_propuesta_dia_familia && (
-                                          <p>
-                                            <strong>
-                                              Fecha Propuesta para el Día de la
-                                              Familia:
-                                            </strong>{" "}
-                                            {fmtFechaLarga(
-                                              details.fecha_propuesta_dia_familia
                                             )}
-                                          </p>
-                                        )}
-                                        {details.cargo_solicitante_familia && (
+                                          </ul>
+                                        </div>
+                                      ) : (
+                                        details.horarioEstudio && (
                                           <p>
-                                            <strong>
-                                              Cargo del Solicitante:
-                                            </strong>{" "}
-                                            {details.cargo_solicitante_familia}
+                                            <strong>Horario:</strong>{" "}
+                                            {details.horarioEstudio}
                                           </p>
-                                        )}
-                                        {details.justificacion_dia_familia && (
-                                          <p>
-                                            <strong>Justificación:</strong>{" "}
-                                            {details.justificacion_dia_familia}
-                                          </p>
-                                        )}
-                                        {o.observacion && (
-                                          <p>
-                                            <strong>
-                                              Observaciones Adicionales:
-                                            </strong>{" "}
-                                            {o.observacion}
-                                          </p>
-                                        )}
-                                      </div>
-                                    );
-                                  }
-                                  return null;
-                                })()}
+                                        )
+                                      )}
+                                    </div>
+                                  );
+                                }
+                                if (o.tipo_novedad === "Permisos") {
+                                  return (
+                                    <div
+                                      className="observaciones-ph-details-group"
+                                      style={baseStyle}
+                                    >
+                                      <p>
+                                        <strong>Motivo:</strong>{" "}
+                                        {o.observacion || "N/A"}
+                                      </p>
+                                    </div>
+                                  );
+                                }
+                                if (
+                                  o.tipo_novedad ===
+                                  "Restricciones/Recomendaciones"
+                                ) {
+                                  return (
+                                    <div
+                                      className="observaciones-ph-details-group"
+                                      style={baseStyle}
+                                    >
+                                      <p>
+                                        <strong>Detalles:</strong>{" "}
+                                        {o.observacion}
+                                      </p>
+                                    </div>
+                                  );
+                                }
+                                if (o.tipo_novedad === "Día de la Familia") {
+                                  return (
+                                    <div
+                                      className="observaciones-ph-details-group"
+                                      style={baseStyle}
+                                    >
+                                      {details.fecha_propuesta_dia_familia && (
+                                        <p>
+                                          <strong>
+                                            Fecha Propuesta para el Día de la
+                                            Familia:
+                                          </strong>{" "}
+                                          {fmtFechaLarga(
+                                            details.fecha_propuesta_dia_familia
+                                          )}
+                                        </p>
+                                      )}
+                                      {details.cargo_solicitante_familia && (
+                                        <p>
+                                          <strong>
+                                            Cargo del Solicitante:
+                                          </strong>{" "}
+                                          {details.cargo_solicitante_familia}
+                                        </p>
+                                      )}
+                                      {details.justificacion_dia_familia && (
+                                        <p>
+                                          <strong>Justificación:</strong>{" "}
+                                          {details.justificacion_dia_familia}
+                                        </p>
+                                      )}
+                                      {o.observacion && (
+                                        <p>
+                                          <strong>
+                                            Observaciones Adicionales:
+                                          </strong>{" "}
+                                          {o.observacion}
+                                        </p>
+                                      )}
+                                    </div>
+                                  );
+                                }
+                                return null;
+                              })()}
 
-                                {/* SECCIÓN DE FIRMAS Y ADJUNTOS (UNIFICADA) */}
-                                <div
-                                  className="observaciones-ph-details-group"
-                                  style={{ marginTop: "1rem" }}
+                              {/* SECCIÓN DE FIRMAS Y ADJUNTOS (UNIFICADA) */}
+                              <div
+                                className="observaciones-ph-details-group"
+                                style={{ marginTop: "1rem" }}
+                              >
+                                <strong
+                                  style={{
+                                    display: "block",
+                                    marginBottom: "0.5rem",
+                                    fontSize: "0.9rem",
+                                    color: "#334155",
+                                  }}
                                 >
-                                  <strong
-                                    style={{
-                                      display: "block",
-                                      marginBottom: "0.5rem",
-                                      fontSize: "0.9rem",
-                                      color: "#334155",
-                                    }}
-                                  >
-                                    Firmas y Adjuntos:
-                                  </strong>
-                                  <div
-                                    style={{
-                                      display: "flex",
-                                      flexWrap: "wrap",
-                                      gap: "0.5rem",
-                                    }}
-                                  >
-                                    {/* Firma Empleado */}
-                                    {o.documento_firma_empleado && (
-                                      <FileAttachmentChip
-                                        url={o.documento_firma_empleado}
-                                        label="Firma Empleado"
-                                        openPreview={openPreview}
-                                      />
-                                    )}
-                                    {/* Firma Líder */}
-                                    {o.documento_firma_lider && (
-                                      <FileAttachmentChip
-                                        url={o.documento_firma_lider}
-                                        label="Firma Líder"
-                                        openPreview={openPreview}
-                                      />
-                                    )}
-                                    {/* Otros Documentos */}
-                                    {o.documento_adjunto && (
-                                      <FileAttachmentChip
-                                        url={o.documento_adjunto}
-                                        label={
-                                          o.tipo_novedad ===
-                                          "Restricciones/Recomendaciones"
-                                            ? "Documento RR"
-                                            : "Documento General"
-                                        }
-                                        openPreview={openPreview}
-                                      />
-                                    )}
-                                    {o.documento_incapacidad && (
-                                      <FileAttachmentChip
-                                        url={o.documento_incapacidad}
-                                        label="Incapacidad Médica"
-                                        openPreview={openPreview}
-                                      />
-                                    )}
-                                    {o.documento_historia_clinica && (
-                                      <FileAttachmentChip
-                                        url={o.documento_historia_clinica}
-                                        label="Historia Clínica"
-                                        openPreview={openPreview}
-                                      />
-                                    )}
-                                  </div>
+                                  Firmas y Adjuntos:
+                                </strong>
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    flexWrap: "wrap",
+                                    gap: "0.5rem",
+                                  }}
+                                >
+                                  {/* Firma Empleado */}
+                                  {o.documento_firma_empleado && (
+                                    <FileAttachmentChip
+                                      url={o.documento_firma_empleado}
+                                      label="Firma Empleado"
+                                      openPreview={openPreview}
+                                    />
+                                  )}
+                                  {/* Firma Líder */}
+                                  {o.documento_firma_lider && (
+                                    <FileAttachmentChip
+                                      url={o.documento_firma_lider}
+                                      label="Firma Líder"
+                                      openPreview={openPreview}
+                                    />
+                                  )}
+                                  {/* Otros Documentos */}
+                                  {o.documento_adjunto && (
+                                    <FileAttachmentChip
+                                      url={o.documento_adjunto}
+                                      label={
+                                        o.tipo_novedad ===
+                                        "Restricciones/Recomendaciones"
+                                          ? "Documento RR"
+                                          : "Documento General"
+                                      }
+                                      openPreview={openPreview}
+                                    />
+                                  )}
+                                  {o.documento_incapacidad && (
+                                    <FileAttachmentChip
+                                      url={o.documento_incapacidad}
+                                      label="Incapacidad Médica"
+                                      openPreview={openPreview}
+                                    />
+                                  )}
+                                  {o.documento_historia_clinica && (
+                                    <FileAttachmentChip
+                                      url={o.documento_historia_clinica}
+                                      label="Historia Clínica"
+                                      openPreview={openPreview}
+                                    />
+                                  )}
                                 </div>
                               </div>
-                            </motion.div>
-                          );
-                        })}
-                      </motion.div>
-                    ) : (
-                      <motion.div
-                        key="empty-observaciones"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="historial-general-msg"
-                      >
-                        <FaTimes /> Sin observaciones registradas.
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
-              </motion.div>
-            )}
-          </>
-        )}
-        <AnimatePresence>
-          {previewOpen && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="historial-general-modal-overlay"
-              onClick={(e) => {
-                if (
-                  e.target.classList.contains("historial-general-modal-overlay")
-                )
-                  closePreview();
-              }}
-              aria-modal="true"
-              role="dialog"
-            >
-              <motion.div
-                initial={{ scale: 0.98, y: 10 }}
-                animate={{ scale: 1, y: 0 }}
-                exit={{ scale: 0.98, y: 10 }}
-                className="historial-general-modal-content"
-              >
-                <div className="historial-general-modal-header">
-                  <h4>Vista previa</h4>
-                  <button
-                    className="historial-general-modal-close"
-                    onClick={closePreview}
-                    aria-label="Cerrar vista previa"
-                  >
-                    <FaTimes />
-                  </button>
-                </div>
-
-                <div className="historial-general-modal-body">
-                  {previewMode === "image" && (
-                    <img
-                      src={previewUrl}
-                      alt="vista previa"
-                      className="historial-general-modal-image"
-                    />
+                            </div>
+                          </motion.div>
+                        );
+                      })}
+                    </motion.div>
+                  ) : (
+                    <motion.div
+                      key="empty-observaciones"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="historial-general-msg"
+                    >
+                      <FaTimes /> Sin observaciones registradas.
+                    </motion.div>
                   )}
-                  {previewMode === "pdf" && (
-                    <Worker workerUrl="https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js">
-                      <div className="historial-general-modal-pdf">
-                        <Viewer
-                          fileUrl={previewUrl}
-                          plugins={[defaultLayoutPluginInstance]}
-                        />
-                      </div>
-                    </Worker>
-                  )}
-                </div>
-              </motion.div>
+                </AnimatePresence>
+              </div>
             </motion.div>
           )}
-        </AnimatePresence>
-      </motion.div>
+        </>
+      ) : (
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            height: "100%",
+            color: "#64748b",
+            opacity: 0.7,
+          }}
+        >
+          <FaHistory style={{ fontSize: "4rem", marginBottom: "1rem" }} />
+          <p style={{ fontSize: "1.2rem" }}>
+            Selecciona un empleado para ver su historial
+          </p>
+        </div>
+      )}
+
+      <AnimatePresence>
+        {previewOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="historial-general-modal-overlay"
+            onClick={(e) => {
+              if (
+                e.target.classList.contains("historial-general-modal-overlay")
+              )
+                closePreview();
+            }}
+            aria-modal="true"
+            role="dialog"
+          >
+            <motion.div
+              initial={{ scale: 0.98, y: 10 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.98, y: 10 }}
+              className="historial-general-modal-content"
+            >
+              <div className="historial-general-modal-header">
+                <h4>Vista previa</h4>
+                <button
+                  className="historial-general-modal-close"
+                  onClick={closePreview}
+                  aria-label="Cerrar vista previa"
+                >
+                  <FaTimes />
+                </button>
+              </div>
+
+              <div className="historial-general-modal-body">
+                {previewMode === "image" && (
+                  <img
+                    src={previewUrl}
+                    alt="vista previa"
+                    className="historial-general-modal-image"
+                  />
+                )}
+                {previewMode === "pdf" && (
+                  <Worker workerUrl="https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js">
+                    <div className="historial-general-modal-pdf">
+                      <Viewer
+                        fileUrl={previewUrl}
+                        plugins={[defaultLayoutPluginInstance]}
+                      />
+                    </div>
+                  </Worker>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
