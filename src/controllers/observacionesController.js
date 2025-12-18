@@ -3,11 +3,11 @@ import { Buffer } from "buffer";
 import { sendEmail } from "../services/emailService.js";
 
 const NOTIFICATION_EMAILS_SST = [
-  "johanmerkahorro777@gmail.com",
-  "juanmerkahorro@gmail.com",
+  "auxiliarsst@merkahorrosas.com ",
+  "sistemageneralsst@merkahorrosas.com",
 ];
 
-const NOTIFICATION_EMAILS_GENERAL = ["johansanchezvalencia@gmail.com"];
+const NOTIFICATION_EMAILS_GENERAL = ["asistentegh@merkahorrosas.com"];
 
 const getRecipients = (tipo) => {
   if (tipo === "Incapacidades" || tipo === "Restricciones/Recomendaciones") {
