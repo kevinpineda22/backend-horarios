@@ -1,0 +1,506 @@
+/* Variables de color y diseño */
+:root {
+  --adm-sch-primary-dark: #210d65; /* Azul oscuro principal */
+  --adm-sch-primary-medium: #3b1a9a; /* Azul medio para fondos */
+  --adm-sch-primary-light: #5c3eb8; /* Azul claro para detalles */
+  --adm-sch-accent-green: #4caf50; /* Verde de acento */
+  --adm-sch-accent-green-dark: #218838; /* Verde oscuro para hover */
+  --adm-sch-text-dark: #333; /* Texto oscuro general */
+  --adm-sch-text-medium: #555; /* Texto secundario */
+  --adm-sch-text-light: #f8f9fa; /* Texto claro (para fondos oscuros) */
+  --adm-sch-bg-main: #f4f7f9; /* Fondo muy claro */
+  --adm-sch-card-bg: #ffffff; /* Fondo de tarjetas/formularios */
+  --adm-sch-border-light: #e0e0e0; /* Borde claro */
+  --adm-sch-shadow-soft: 0 4px 10px rgba(0, 0, 0, 0.05); /* Sombra ligera */
+  --adm-sch-shadow-medium: 0 8px 20px rgba(0, 0, 0, 0.1); /* Sombra media */
+  --adm-sch-border-radius: 10px; /* Radio de borde general */
+  --adm-sch-transition-speed: 0.3s; /* Velocidad de transición */
+}
+
+/* Main container */
+.admin-sch-main-container {
+  display: flex;
+  min-height: 100vh;
+  background-color: var(--adm-sch-bg-main);
+  font-family: "Poppins", sans-serif;
+}
+
+/* Sidebar (Rediseñado para hover) */
+.admin-sch-sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 100vh;
+  width: 80px; /* Ancho colapsado */
+  background: linear-gradient(
+    180deg,
+    var(--adm-sch-primary-dark) 0%,
+    var(--adm-sch-primary-medium) 100%
+  );
+  color: var(--adm-sch-text-light);
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--adm-sch-shadow-medium);
+  padding-top: 1rem;
+  z-index: 1000;
+  transition: width 0.3s ease;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.admin-sch-sidebar:hover {
+  width: 320px; /* Ancho expandido aumentado para evitar cortes */
+}
+
+.admin-sch-sidebar-header {
+  padding: 1.5rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  position: relative;
+  width: 100%;
+  overflow: hidden; /* Asegura que nada se salga */
+}
+
+.admin-sch-back-button {
+  position: absolute !important;
+  top: 0.5rem !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  color: var(--adm-sch-text-light);
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 999 !important;
+  opacity: 0;
+}
+
+.admin-sch-sidebar:hover .admin-sch-back-button {
+  opacity: 1;
+  left: 1rem !important;
+  transform: none !important;
+  top: 0.85rem !important;
+  width: 36px;
+  height: 36px;
+}
+
+.admin-sch-back-button:hover {
+  background: rgba(255, 255, 255, 0.25);
+  transform: translateY(-2px);
+  color: #ffffff;
+}
+
+.admin-sch-logo {
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: 50%;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transition: all 0.3s ease;
+  margin-top: 1rem;
+}
+
+.admin-sch-sidebar:hover .admin-sch-logo {
+  width: 80px;
+  height: 80px;
+  margin-top: 0;
+}
+
+.admin-sch-sidebar-title {
+  font-size: 1.5rem; /* Reducido ligeramente para mejor ajuste */
+  font-weight: 700;
+  margin: 0;
+  color: var(--adm-sch-text-light);
+  opacity: 0;
+  transition: opacity 0.2s;
+  height: 0;
+  overflow: hidden;
+  white-space: normal; /* Permite salto de línea si es necesario */
+  line-height: 1.2;
+  padding: 0 1rem; /* Margen lateral para que no toque bordes */
+}
+
+.admin-sch-sidebar:hover .admin-sch-sidebar-title {
+  opacity: 1;
+  height: auto;
+  margin-top: 0.5rem;
+  transition-delay: 0.1s;
+}
+
+.admin-sch-sidebar-nav {
+  flex: 1;
+  padding: 1.5rem 0;
+  width: 100%;
+}
+
+.admin-sch-sidebar-button {
+  width: 100%;
+  padding: 1.1rem 0 1.1rem 28px; /* Padding fijo para centrar icono en 80px */
+  justify-content: flex-start; /* Siempre alineado a la izquierda */
+  background: none;
+  border: none;
+  color: var(--adm-sch-text-light);
+  font-size: 1.05rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.3s ease, color 0.3s ease; /* Quitamos transición de padding/justify */
+  display: flex;
+  align-items: center;
+  gap: 1rem; /* Gap fijo */
+  position: relative;
+  border-left: 5px solid transparent; /* Borde invisible por defecto para evitar saltos */
+}
+
+.admin-sch-sidebar-button svg {
+  font-size: 1.5rem;
+  min-width: 1.5rem;
+  /* El icono se queda quieto gracias al padding fijo */
+}
+
+.admin-sch-sidebar-text {
+  opacity: 0;
+  visibility: hidden;
+  transform: translateX(-10px);
+  transition: all 0.3s ease;
+  white-space: nowrap;
+}
+
+.admin-sch-sidebar:hover .admin-sch-sidebar-text {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(0);
+  transition-delay: 0.1s;
+}
+
+.admin-sch-sidebar-button:hover {
+  background-color: var(--adm-sch-primary-light);
+  /* Quitamos el translateX para evitar movimiento del icono */
+}
+
+.admin-sch-sidebar-button-active {
+  background-color: var(--adm-sch-primary-light);
+  color: #ffffff;
+  font-weight: 600;
+  border-left: 5px solid var(--adm-sch-accent-green);
+  padding-left: 23px; /* 28px - 5px del borde = 23px para mantener posición */
+}
+
+.admin-sch-sidebar:hover .admin-sch-sidebar-button-active {
+  padding-left: 23px; /* Mantenemos el mismo padding */
+}
+
+/* Content area - Rediseñada */
+.admin-sch-content {
+  margin-left: 80px;
+  width: calc(100% - 80px);
+  padding: 2.5rem;
+  background-color: var(--adm-sch-bg-main);
+  overflow-y: auto;
+  transition: margin-left 0.3s ease;
+}
+
+.admin-sch-main-title {
+  font-size: 2.5rem;
+  font-weight: 800;
+  color: var(--adm-sch-primary-dark);
+  margin-bottom: 2rem;
+  text-align: center;
+  letter-spacing: -0.5px;
+}
+
+/* Layout de un solo panel, fluido y adaptable */
+.admin-sch-layout-container {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.admin-sch-panel-principal {
+  background-color: var(--adm-sch-card-bg);
+  padding: 2rem;
+  border-radius: var(--adm-sch-border-radius);
+  box-shadow: var(--adm-sch-shadow-medium);
+  border: 1px solid var(--adm-sch-border-light);
+}
+
+/* Estilos del buscador y la tabla */
+.admin-sch-search-card {
+  padding: 1rem;
+  background-color: var(--adm-sch-card-bg);
+  border-radius: var(--adm-sch-border-radius);
+  border: 1px solid var(--adm-sch-border-light);
+  margin-bottom: 1.5rem;
+}
+
+.admin-sch-search-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--adm-sch-primary-dark);
+  margin-bottom: 1.5rem;
+}
+
+.admin-sch-selected-empleado {
+  background-color: #e3f2fd; /* Fondo claro sutil */
+  border-radius: var(--adm-sch-border-radius);
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  font-weight: 600;
+  color: var(--adm-sch-primary-dark);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+}
+
+.admin-sch-selected-empleado svg {
+  font-size: 1.5rem;
+  color: var(--adm-sch-primary-medium);
+}
+
+.admin-sch-table-wrapper {
+  overflow-x: auto;
+  border: 1px solid var(--adm-sch-border-light);
+  border-radius: var(--adm-sch-border-radius);
+  box-shadow: var(--adm-sch-shadow-soft);
+}
+
+.admin-sch-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 450px;
+}
+
+.admin-sch-table-header,
+.admin-sch-table-cell {
+  padding: 1rem 1.2rem;
+  border-bottom: 1px solid var(--adm-sch-border-light);
+  text-align: left;
+  white-space: nowrap;
+  color: var(--adm-sch-text-dark);
+}
+
+.admin-sch-table-header {
+  background-color: #f0f2f5;
+  font-weight: 600;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  color: var(--adm-sch-text-medium);
+}
+
+.admin-sch-table tbody tr:hover {
+  background-color: #f9fafb;
+  cursor: pointer;
+}
+
+/* Botones de acción - Minimalistas */
+.sch-btn-action {
+  background-color: #f0f2f5; /* Fondo más sutil */
+  color: var(--adm-sch-primary-dark);
+  border: 1px solid var(--adm-sch-border-light);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1rem;
+  border-radius: var(--adm-sch-border-radius);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--adm-sch-transition-speed);
+}
+
+.sch-btn-action:hover:not(:disabled) {
+  background-color: var(--adm-sch-primary-light);
+  color: white;
+  border-color: var(--adm-sch-primary-light);
+}
+
+.sch-btn-action:disabled {
+  background-color: #d1d5db;
+  color: #6b7280;
+  cursor: not-allowed;
+}
+
+/* Estilos de los formularios */
+.admin-sch-form-group {
+  margin-bottom: 1.5rem;
+}
+
+.admin-sch-form-label {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--adm-sch-primary-dark);
+  margin-bottom: 0.6rem;
+}
+
+.admin-sch-form-input,
+.admin-sch-form-textarea,
+.admin-sch-form-file input[type="file"] {
+  width: 100%;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--adm-sch-border-light);
+  border-radius: var(--adm-sch-border-radius);
+  font-size: 0.95rem;
+  color: var(--adm-sch-text-dark);
+  background-color: var(--adm-sch-card-bg);
+  transition: all var(--adm-sch-transition-speed) ease;
+  box-sizing: border-box;
+}
+
+.admin-sch-form-input:focus,
+.admin-sch-form-textarea:focus {
+  outline: none;
+  border-color: var(--adm-sch-accent-green);
+  box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.2);
+}
+
+.admin-sch-form-button {
+  width: 100%;
+  padding: 1rem;
+  background-color: var(--adm-sch-accent-green);
+  color: white;
+  border: none;
+  border-radius: var(--adm-sch-border-radius);
+  font-size: 1.1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--adm-sch-transition-speed) ease;
+  box-shadow: var(--adm-sch-shadow-soft);
+}
+
+.admin-sch-form-button:hover:not(:disabled) {
+  background-color: var(--adm-sch-accent-green-dark);
+  box-shadow: var(--adm-sch-shadow-medium);
+  transform: translateY(-2px);
+}
+
+.admin-sch-form-button:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
+  opacity: 0.7;
+  box-shadow: none;
+}
+
+.admin-sch-message {
+  padding: 1rem;
+  border-radius: 8px;
+  margin-top: 1rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.admin-sch-form-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-end;
+  margin-bottom: 0.75rem;
+}
+
+.admin-sch-history-card {
+  background-color: var(--adm-sch-card-bg);
+  padding: 1.5rem;
+  border-radius: var(--adm-sch-border-radius);
+  box-shadow: var(--adm-sch-shadow-soft);
+  border: 1px solid var(--adm-sch-border-light);
+  margin-bottom: 1rem;
+}
+
+.admin-sch-history-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.admin-sch-history-date {
+  font-weight: 600;
+  color: var(--adm-sch-primary-dark);
+}
+
+.admin-sch-history-type {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--adm-sch-text-light);
+  background-color: var(--adm-sch-primary-medium);
+  padding: 0.25rem 0.5rem;
+  border-radius: 5px;
+}
+
+.admin-sch-history-summary p {
+  margin: 0;
+  color: var(--adm-sch-text-medium);
+  font-size: 0.9rem;
+}
+
+.admin-sch-history-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.sch-btn-danger {
+  background-color: #ef4444; /* Rojo para eliminar */
+  color: white;
+  border-color: #ef4444;
+}
+
+.sch-btn-danger:hover {
+  background-color: #dc2626;
+  border-color: #dc2626;
+}
+
+.admin-sch-form-buttons-container {
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
+  margin-top: 2rem;
+}
+
+/* Responsive design */
+@media (max-width: 1024px) {
+  .admin-sch-main-container {
+    flex-direction: column;
+  }
+  .admin-sch-sidebar {
+    width: 100%;
+    height: auto;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    padding: 1rem 0;
+    box-shadow: var(--adm-sch-shadow-soft);
+  }
+  .admin-sch-layout-container {
+    flex-direction: column;
+    min-width: 100%;
+  }
+  .admin-sch-panel-principal {
+    padding: 1.5rem;
+  }
+  .admin-sch-content {
+    padding: 1.5rem;
+  }
+}
+
+/* Nuevo layout de dos columnas para pantallas grandes */
+@media (min-width: 1025px) {
+    .admin-sch-layout-container {
+    display: grid;
+    grid-template-columns: 1fr 2fr; /* 1/3 para el panel de la izquierda, 2/3 para el de la derecha */
+    gap: 2rem;
+  }
+}

@@ -3,8 +3,9 @@ import { Buffer } from "buffer";
 import { sendEmail } from "../services/emailService.js";
 
 const NOTIFICATION_EMAILS_SST = [
-  "auxiliarsst@merkahorrosas.com ",
-  "sistemageneralsst@merkahorrosas.com",
+  /* "auxiliarsst@merkahorrosas.com ",
+  "sistemageneralsst@merkahorrosas.com", */
+  "johanmerkahorro777@gmail.com"
 ];
 
 const NOTIFICATION_EMAILS_GENERAL = ["asistentegh@merkahorrosas.com"];
