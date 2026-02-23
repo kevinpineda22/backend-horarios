@@ -2,12 +2,15 @@ import { supabaseAxios, storageClient } from "../services/supabaseAxios.js";
 import { Buffer } from "buffer";
 import { sendEmail } from "../services/emailService.js";
 
-const NOTIFICATION_EMAILS_SST = [
-  "auxiliarsst@merkahorrosas.com ",
+const NOTIFICATION_EMAILS_SST = [ // INCAPACIDADES Y RESTRICCIONES
+  "auxiliarsst@merkahorrosas.com",
   "sistemageneralsst@merkahorrosas.com",
+  "analistajuniordh@merkahorrosas.com",
+  "analistadh@merkahorrosas.com",
+  "asistentegh@merkahorrosas.com",
 ];
 
-const NOTIFICATION_EMAILS_GENERAL = ["asistentegh@merkahorrosas.com"];
+const NOTIFICATION_EMAILS_GENERAL = ["asistentegh@merkahorrosas.com"]; //TODOS LOS EMAILS EXCEPTO INCAPACIDADES Y RESTRICCIONES
 
 const getRecipients = (tipo) => {
   if (tipo === "Incapacidades" || tipo === "Restricciones/Recomendaciones") {
