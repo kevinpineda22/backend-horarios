@@ -3,13 +3,11 @@ import { Buffer } from "buffer";
 import { sendEmail } from "../services/emailService.js";
 
 const NOTIFICATION_EMAILS_SST = [ // INCAPACIDADES Y RESTRICCIONES
- /*  "auxiliarsst@merkahorrosas.com",
+  "auxiliarsst@merkahorrosas.com",
   "sistemageneralsst@merkahorrosas.com",
   "analistajuniordh@merkahorrosas.com",
   "analistadh@merkahorrosas.com",
-  "asistentegh@merkahorrosas.com", */
-  "johanmerkahorro777@gmail.com",
-  "juanmerkahorro@gmail.com"
+  "asistentegh@merkahorrosas.com",
 ];
 
 const NOTIFICATION_EMAILS_GENERAL = ["asistentegh@merkahorrosas.com"]; //TODOS LOS EMAILS EXCEPTO INCAPACIDADES Y RESTRICCIONES
