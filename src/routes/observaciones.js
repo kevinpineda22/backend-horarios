@@ -13,8 +13,9 @@ router.post("/stats", ctrl.getObservacionesStats);
 router.patch(
   "/:empleado_id/marcar-revisadas",
   authenticateUser,
-  ctrl.marcarComoRevisadas
+  ctrl.marcarComoRevisadas,
 );
+router.patch("/:id/revisar", authenticateUser, ctrl.marcarUnaComoRevisada);
 router.get("/permissions", authenticateUser, ctrl.checkPermissions);
 router.get("/:empleado_id", ctrl.getObservacionesByEmpleadoId);
 router.post("/", authenticateUser, ctrl.createObservacion);

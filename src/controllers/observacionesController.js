@@ -2,7 +2,8 @@ import { supabaseAxios, storageClient } from "../services/supabaseAxios.js";
 import { Buffer } from "buffer";
 import { sendEmail } from "../services/emailService.js";
 
-const NOTIFICATION_EMAILS_SST = [ // INCAPACIDADES Y RESTRICCIONES
+const NOTIFICATION_EMAILS_SST = [
+  // INCAPACIDADES Y RESTRICCIONES
   "auxiliarsst@merkahorrosas.com",
   "sistemageneralsst@merkahorrosas.com",
   "analistajuniordh@merkahorrosas.com",
@@ -19,26 +20,50 @@ const getRecipients = (tipo) => {
   return NOTIFICATION_EMAILS_GENERAL;
 };
 
+const detectMimeAndExt = (buf) => {
+  if (buf[0] === 0x25 && buf[1] === 0x50 && buf[2] === 0x44 && buf[3] === 0x46)
+    return { mime: "application/pdf", ext: "pdf" };
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47)
+    return { mime: "image/png", ext: "png" };
+  if (buf[0] === 0xff && buf[1] === 0xd8)
+    return { mime: "image/jpeg", ext: "jpg" };
+  if (buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46)
+    return { mime: "image/gif", ext: "gif" };
+  if (
+    buf[0] === 0x52 &&
+    buf[1] === 0x49 &&
+    buf[2] === 0x46 &&
+    buf[3] === 0x46 &&
+    buf[8] === 0x57 &&
+    buf[9] === 0x45 &&
+    buf[10] === 0x42 &&
+    buf[11] === 0x50
+  )
+    return { mime: "image/webp", ext: "webp" };
+  return { mime: "application/octet-stream", ext: "bin" };
+};
+
 const uploadFileAndGetUrl = async (
   base64,
   fileName,
-  bucketName = "documentos-observaciones-ph"
+  bucketName = "documentos-observaciones-ph",
 ) => {
   if (!base64 || !fileName) return null;
 
   if (typeof base64 === "string" && base64.startsWith("http")) return base64;
 
   const buf = Buffer.from(base64, "base64");
+  const { mime, ext } = detectMimeAndExt(buf);
   // Usamos el nombre del archivo con un timestamp y un ID único
   const fn = `doc_${fileName}_${Date.now()}_${Math.random()
     .toString(36)
-    .substr(2)}.png`;
+    .substr(2)}.${ext}`;
 
   const { data, error } = await storageClient.storage
     .from(bucketName)
     .upload(fn, buf, {
       upsert: true,
-      contentType: "image/png",
+      contentType: mime,
     });
 
   if (error) throw new Error(`Error al subir archivo: ${error.message}`);
@@ -224,12 +249,12 @@ export const createObservacion = async (req, res) => {
       urlIncapacidad = await uploadFileAndGetUrl(
         incapacidad_base64,
         "incap",
-        "documentos-observaciones-ph"
+        "documentos-observaciones-ph",
       );
       urlHistoria = await uploadFileAndGetUrl(
         historia_base64,
         "historia",
-        "documentos-observaciones-ph"
+        "documentos-observaciones-ph",
       );
     } else if (tipo_novedad === "Restricciones/Recomendaciones") {
       if (!documento_base64) {
@@ -241,13 +266,13 @@ export const createObservacion = async (req, res) => {
       urlPublic = await uploadFileAndGetUrl(
         documento_base64,
         file_name,
-        "documentos-observaciones-ph"
+        "documentos-observaciones-ph",
       );
     } else {
       urlPublic = await uploadFileAndGetUrl(
         documento_base64,
         file_name,
-        "documentos-observaciones-ph"
+        "documentos-observaciones-ph",
       );
     }
 
@@ -256,14 +281,14 @@ export const createObservacion = async (req, res) => {
       urlFirmaEmpleado = await uploadFileAndGetUrl(
         firma_empleado_base64,
         `${empleado_id}_empleado`,
-        "documentos-observaciones-ph"
+        "documentos-observaciones-ph",
       );
     }
     if (firma_lider_base64) {
       urlFirmaLider = await uploadFileAndGetUrl(
         firma_lider_base64,
         `${empleado_id}_lider`,
-        "documentos-observaciones-ph"
+        "documentos-observaciones-ph",
       );
     }
 
@@ -294,14 +319,14 @@ export const createObservacion = async (req, res) => {
           Prefer: "return=representation",
           "Content-Type": "application/json",
         },
-      }
+      },
     );
     if (error) throw error;
 
     // 3. Lógica de Notificación por Correo (Siempre notifica, destinatario depende del tipo)
     try {
       const empleadoRes = await supabaseAxios.get(
-        `/empleados?select=nombre_completo,cedula&id=eq.${empleado_id}`
+        `/empleados?select=nombre_completo,cedula&id=eq.${empleado_id}`,
       );
       const empleado = empleadoRes.data?.[0] || {
         nombre_completo: "Empleado Desconocido",
@@ -345,7 +370,7 @@ export const createObservacion = async (req, res) => {
                                 </div>
                             </div>
                             <div style="background-color: #f8f9fa; padding: 20px; text-align: center; border-top: 1px solid #e0e0e0;">
-                                <p style="margin: 0; color: #666666; font-size: 14px;">Este es un mensaje automatizado del sistema de horarios.</p>
+                                <p style="margin: 0; color: #666666; font-size: 14px;">Este es un mensaje automatizado del sistema de Construahorro.</p>
                             </div>
                         </div>
                     </body>
@@ -355,7 +380,7 @@ export const createObservacion = async (req, res) => {
     } catch (emailError) {
       console.error(
         "Error al enviar email de notificación (creación):",
-        emailError
+        emailError,
       );
     }
 
@@ -409,7 +434,7 @@ export const updateObservacion = async (req, res) => {
 
   const updateDateRangeError = validateDateRangePayload(
     tipo_novedad,
-    mergedDetails
+    mergedDetails,
   );
   if (updateDateRangeError) {
     return res.status(400).json({ message: updateDateRangeError });
@@ -430,7 +455,7 @@ export const updateObservacion = async (req, res) => {
         urlIncapacidad = await uploadFileAndGetUrl(
           incapacidad_base64,
           `${id}_incap`,
-          "documentos-observaciones-ph"
+          "documentos-observaciones-ph",
         );
       } else if (incapacidad_base64 === null && documento_incapacidad) {
         const fileName = documento_incapacidad.split("/").pop();
@@ -443,7 +468,7 @@ export const updateObservacion = async (req, res) => {
         urlHistoria = await uploadFileAndGetUrl(
           historia_base64,
           `${id}_historia`,
-          "documentos-observaciones-ph"
+          "documentos-observaciones-ph",
         );
       } else if (historia_base64 === null && documento_historia_clinica) {
         const fileName = documento_historia_clinica.split("/").pop();
@@ -457,7 +482,7 @@ export const updateObservacion = async (req, res) => {
         urlPublic = await uploadFileAndGetUrl(
           documento_base64,
           file_name,
-          "documentos-observaciones-ph"
+          "documentos-observaciones-ph",
         );
       } else if (documento_base64 === null && documento_adjunto_existente) {
         const fileName = documento_adjunto_existente.split("/").pop();
@@ -478,7 +503,7 @@ export const updateObservacion = async (req, res) => {
       urlFirmaEmpleado = await uploadFileAndGetUrl(
         firma_empleado_base64,
         `${id}_empleado_upd`,
-        "documentos-observaciones-ph"
+        "documentos-observaciones-ph",
       );
     } else if (firma_empleado_base64 === null && documento_firma_empleado) {
       const fileName = documento_firma_empleado.split("/").pop();
@@ -493,7 +518,7 @@ export const updateObservacion = async (req, res) => {
       urlFirmaLider = await uploadFileAndGetUrl(
         firma_lider_base64,
         `${id}_lider_upd`,
-        "documentos-observaciones-ph"
+        "documentos-observaciones-ph",
       );
     } else if (firma_lider_base64 === null && documento_firma_lider) {
       const fileName = documento_firma_lider.split("/").pop();
@@ -527,7 +552,7 @@ export const updateObservacion = async (req, res) => {
 
     const { error } = await supabaseAxios.patch(
       `/observaciones?id=eq.${id}`,
-      payload
+      payload,
     );
     if (error) throw error;
 
@@ -574,7 +599,7 @@ export const updateObservacion = async (req, res) => {
     } catch (emailError) {
       console.error(
         "Error al enviar email de notificación (actualización):",
-        emailError
+        emailError,
       );
     }
 
@@ -592,7 +617,7 @@ export const deleteObservacion = async (req, res) => {
       data: [obs],
       error: fetchError,
     } = await supabaseAxios.get(
-      `/observaciones?select=documento_adjunto,documento_incapacidad,documento_historia_clinica,documento_firma_empleado,documento_firma_lider,details&id=eq.${id}`
+      `/observaciones?select=documento_adjunto,documento_incapacidad,documento_historia_clinica,documento_firma_empleado,documento_firma_lider,details&id=eq.${id}`,
     );
     if (fetchError) throw fetchError;
 
@@ -616,7 +641,7 @@ export const deleteObservacion = async (req, res) => {
     }
 
     const { error: deleteError } = await supabaseAxios.delete(
-      `/observaciones?id=eq.${id}`
+      `/observaciones?id=eq.${id}`,
     );
     if (deleteError) throw deleteError;
 
@@ -630,7 +655,7 @@ export const deleteObservacion = async (req, res) => {
 export const getObservacionesStats = async (req, res) => {
   try {
     const { data, error } = await supabaseAxios.post(
-      "/rpc/obtener_stats_empleados"
+      "/rpc/obtener_stats_empleados",
     );
     if (error) {
       console.error("Error detallado del RPC:", error);
@@ -648,10 +673,12 @@ export const getObservacionesStats = async (req, res) => {
 
 // --- LISTA CENTRALIZADA DE PERMISOS ---
 const ALLOWED_EMAILS = [
-  "gestionhumana@merkahorro.com",
+  "auxiliarsst@merkahorrosas.com",
+  "sistemageneralsst@merkahorrosas.com",
+  "analistajuniordh@merkahorrosas.com",
+  "analistadh@merkahorrosas.com",
   "asistentegh@merkahorrosas.com",
   "johanmerkahorro777@gmail.com",
-  /* "juanmerkahorro@gmail.com", */
 ];
 
 export const checkPermissions = (req, res) => {
@@ -688,7 +715,7 @@ export const marcarComoRevisadas = async (req, res) => {
   try {
     const { error } = await supabaseAxios.patch(
       `/observaciones?empleado_id=eq.${empleado_id}&revisada=eq.false`,
-      { revisada: true }
+      { revisada: true },
     );
     if (error) throw error;
     res.json({ message: "Observaciones marcadas como revisadas con éxito." });
@@ -696,6 +723,38 @@ export const marcarComoRevisadas = async (req, res) => {
     console.error("Error al marcar observaciones como revisadas:", e);
     res.status(500).json({
       message: "Error interno al actualizar observaciones",
+      error: e.message,
+    });
+  }
+};
+
+export const marcarUnaComoRevisada = async (req, res) => {
+  const { id } = req.params;
+
+  const user = req.user;
+  const isHR =
+    user &&
+    (ALLOWED_EMAILS.includes(user.email) ||
+      user.role === "gestion_humana" ||
+      user.app_metadata?.role === "gestion_humana" ||
+      user.user_metadata?.role === "gestion_humana");
+
+  if (!isHR) {
+    return res
+      .status(403)
+      .json({ message: "No tienes permisos para realizar esta acción." });
+  }
+
+  try {
+    const { error } = await supabaseAxios.patch(`/observaciones?id=eq.${id}`, {
+      revisada: true,
+    });
+    if (error) throw error;
+    res.json({ message: "Observación marcada como revisada." });
+  } catch (e) {
+    console.error("Error al marcar observación como revisada:", e);
+    res.status(500).json({
+      message: "Error interno al actualizar observación",
       error: e.message,
     });
   }
