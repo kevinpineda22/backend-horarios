@@ -82,11 +82,29 @@ ya modela la distribución 2+2. El trabajo es CONECTAR + reescribir el motor.
 - [ ] Cargar los 4 correos de incapacidad (tipo `critica`) — desde el panel, cuando se tengan
 - [x] ~~Definir máximo de extras por quincena~~ → queda **configurable por el admin** (param `max_extra_por_quincena`), en blanco por defecto; la alerta no dispara hasta que lo cargue
 
+## Arquitectura de UI (reorganización)
+
+Mental model en 3 momentos, sin redundancia:
+- **Configuración** (se toca poco): Jornadas, Parámetros, Sedes y Cupos, Destinatarios.
+- **Por empleado**: el turno base se asigna **dentro del Programador** (`TurnoBaseEmpleado`), al seleccionar el colaborador. Un solo lugar, un solo buscador.
+- **Operación diaria** (Programador): elegir empleado → ver/ajustar turno base → generar (sin elegir jornada ni días: vienen del turno) → editar/intercambiar.
+
+Cambios hechos:
+- ✅ Tab "Asignar Turnos" de Configuración → **eliminado**; integrado en Programador vía `TurnoBaseEmpleado.jsx`.
+- ✅ `ScheduleCreator` → se le quitó el dropdown de jornada y el selector de días (redundantes; el turno base manda).
+- ✅ `useScheduleManagement` → ya no exige `jornadaId` ni envía `jornada_id`.
+- ✅ Tab "Jornadas" → arreglado el mapeo `dias_laborales` ↔ `dias_aplica` (enteros ISO). Crear/editar/mostrar OK.
+- ✅ Eliminado `tabs/AsignacionTurnos.jsx` (código muerto).
+
 ## Deuda técnica / issues conocidos
 
-- **Tab Jornadas (frontend)**: envía `dias_laborales` (nombres de día) pero el backend `createJornada` espera `dias_aplica` (array de enteros). Crear/editar jornadas desde ese tab fallaría. No bloquea hoy porque los 2 turnos se siembran por SQL. Revisar en una pasada de limpieza.
-- **`updateHorario`**: aún con el modelo viejo (`getDayInfo` 07-18). Se reescribe en Fase 4.
+- **`updateHorario`**: bloques ya por turno (Fase 4 ✅), pero conserva las validaciones semanales viejas (extra ≤12/sem) + banco del modelo anterior. La spec controla por quincena → reconciliar.
 - **`ALLOWED_EMAILS`** en `observacionesController` (permisos): lista hardcodeada con un gmail personal. Tema de permisos, no de notificación. Limpiar aparte.
+- **Frontend — hecho en pasada de bugs/edición**:
+  - ✅ Crashes `toast.info`/`toast.warning` (no existen en react-hot-toast) corregidos en `useScheduleManagement`, `useScheduleAndBlockingData`, `ObservacionesPH`.
+  - ✅ `useScheduleEditing` reescrito: ya NO recalcula al modelo viejo (corrupción 10/7 que metía extras fantasma). Ahora solo envía las horas de cada día (preserva las existentes) + `usuario_email`/`usuario_nombre` (auditoría) y muestra la alerta de quincena (`extras_quincena`) por toast.
+- **Frontend pendiente**: UI de intercambio de turnos (backend `POST /horarios/intercambio` listo), vista de consulta de auditoría, mostrar compensación de estudio (4h/4h) en el calendario. Limpiar el selector de "día reducido" de `WeekHistory` (quedó inerte).
+- **Config Vercel (no es código)**: el envío de correo falla con `535 auth` → credenciales SMTP de Outlook (`EMAIL_USER`/`EMAIL_PASS`) mal o vencidas en las env vars de Vercel. El horario se crea igual; solo el correo no sale.
 
 ## Archivos clave
 

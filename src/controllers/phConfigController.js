@@ -31,20 +31,27 @@ export const listParametros = async (_req, res) => {
   }
 };
 
-// Upsert por clave (crea o actualiza). Body: { clave, valor, descripcion? }
+// Upsert de parámetros. Acepta DOS formas:
+//  - uno solo: { clave, valor, descripcion? }
+//  - varios:   un objeto plano { clave1: valor1, clave2: valor2, ... }
 export const upsertParametro = async (req, res) => {
-  const { clave, valor, descripcion } = req.body;
-  if (!clave || valor === undefined) {
-    return res.status(400).json({ message: "clave y valor son requeridos." });
+  const body = req.body || {};
+  const entries =
+    body.clave !== undefined
+      ? [[body.clave, body.valor]]
+      : Object.entries(body);
+  const validas = entries.filter(([clave]) => clave); // descartar claves vacías
+  if (validas.length === 0) {
+    return res.status(400).json({ message: "No hay parámetros para guardar." });
   }
   try {
-    const payload = {
+    const ahora = new Date().toISOString();
+    const payload = validas.map(([clave, valor]) => ({
       clave,
-      valor,
-      descripcion: descripcion ?? null,
-      actualizado_en: new Date().toISOString(),
+      valor: valor === undefined ? null : valor,
+      actualizado_en: ahora,
       actualizado_por: req.user?.email || null,
-    };
+    }));
     const { data, error } = await supabaseAxios.post(
       `/ph_parametros_globales?on_conflict=clave`,
       payload,
@@ -52,9 +59,9 @@ export const upsertParametro = async (req, res) => {
     );
     if (error) throw error;
     invalidatePhConfigCache();
-    res.status(200).json(data?.[0] || payload);
+    res.status(200).json(data || payload);
   } catch (e) {
-    handleError(res, e, "Error guardando parámetro");
+    handleError(res, e, "Error guardando parámetros");
   }
 };
 
