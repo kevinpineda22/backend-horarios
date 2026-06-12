@@ -40,7 +40,10 @@ export const upsertParametro = async (req, res) => {
     body.clave !== undefined
       ? [[body.clave, body.valor]]
       : Object.entries(body);
-  const validas = entries.filter(([clave]) => clave); // descartar claves vacías
+  // Descartar claves vacías o sin valor (la columna `valor` es NOT NULL).
+  const validas = entries.filter(
+    ([clave, valor]) => clave && valor !== undefined && valor !== null
+  );
   if (validas.length === 0) {
     return res.status(400).json({ message: "No hay parámetros para guardar." });
   }
