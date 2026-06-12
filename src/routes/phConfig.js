@@ -22,16 +22,17 @@ router.patch("/jornadas/:id", ctrl.updateJornada);
 router.delete("/jornadas/:id", ctrl.deleteJornada);
 
 // Configuración por sede (cupos)
-router.get("/sedes/:sede_id/config", ctrl.listSedeConfig);
-router.put("/sedes/config", ctrl.upsertSedeConfig);
+// Lista todas las sedes con sus cupos agregados ({ [jornada_id]: cupos }).
+router.get("/sedes", ctrl.listSedesConCupos);
+// Guarda todos los cupos de una sede de una sola vez.
+router.put("/sedes/:id", ctrl.updateSedeCupos);
 
-// Asignación de jornada por colaborador
+// Asignación de turno base por colaborador (con historial de vigencia)
 router.get("/asignaciones/:empleado_id", ctrl.listAsignaciones);
 router.post("/asignaciones", ctrl.asignarJornada);
 
-// Destinatarios de notificación
+// Destinatarios de notificación (lista plana de correos para novedades críticas)
 router.get("/destinatarios", ctrl.listDestinatarios);
-router.post("/destinatarios", ctrl.createDestinatario);
-router.delete("/destinatarios/:id", ctrl.deleteDestinatario);
+router.put("/destinatarios", ctrl.replaceDestinatarios);
 
 export default router;

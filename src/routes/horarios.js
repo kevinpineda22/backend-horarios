@@ -11,6 +11,13 @@ const router = express.Router();
 router.patch("/archivar", ctrl.archivarHorarios);
 
 /**
+ * GET /api/horarios/extras-quincena/:empleado_id?fecha=YYYY-MM-DD
+ * Acumulado de horas extra en la quincena vs. el máximo configurable (spec 4.2).
+ * Debe ir antes de la ruta genérica /:empleado_id.
+ */
+router.get("/extras-quincena/:empleado_id", ctrl.getExtrasQuincena);
+
+/**
  * GET  /api/horarios/:empleado_id/completo
  * Devuelve el historial completo de horarios de un empleado (incluyendo archivados)
  */
@@ -25,6 +32,12 @@ router.get("/:empleado_id/completo", (req, res) => {
  * Devuelve el historial de horarios activos de un empleado
  */
 router.get("/:empleado_id", ctrl.getHorariosByEmpleadoId);
+
+/**
+ * POST /api/horarios/intercambio
+ * Intercambia los turnos de dos colaboradores para una fecha (spec 5.1).
+ */
+router.post("/intercambio", ctrl.intercambiarTurnos);
 
 /**
  * POST /api/horarios

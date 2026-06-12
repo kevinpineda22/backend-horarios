@@ -147,6 +147,11 @@ export const buildScheduleConfig = async () => {
     },
     descansos: Array.isArray(p.descansos) ? p.descansos : [],
     modeloQuincena: p.modelo_quincena || null,
+    // Compensación de estudio (spec 6.2): tope de horas que cubre el colaborador
+    // desde sus extras por día de estudio; el resto lo cubre la empresa.
+    compensacion: {
+      topeEstudioColaborador: p.horas_estudio_colaborador,
+    },
     jornadas: cache.jornadas || [],
   };
 };

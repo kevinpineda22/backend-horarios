@@ -121,9 +121,12 @@ const WD_NAME = {
 // ========================
 
 // Capacidad Legal Máxima (Base para 'horas_base')
-export const getLegalCapForDay = (weekday) => {
-  if (weekday === 6) return 4; // Sábado
-  if (weekday >= 1 && weekday <= 5) return 8; // Lunes a Viernes
+// Acepta un `cfg` opcional (de buildScheduleConfig). Si la config no define
+// el tope diario, cae a los valores legales actuales (8 L-V / 4 Sáb).
+export const getLegalCapForDay = (weekday, cfg = null) => {
+  if (weekday === 6) return Number(cfg?.limites?.legalDiarioSabado ?? 4); // Sábado
+  if (weekday >= 1 && weekday <= 5)
+    return Number(cfg?.limites?.legalDiarioSemana ?? 8); // Lunes a Viernes
   return 0; // Domingo
 };
 
@@ -333,7 +336,8 @@ export function generateScheduleForRange56(
   holidaySet,
   holidayOverrides = {},
   sundayOverrides = {},
-  partialObservations = []
+  partialObservations = [],
+  cfg = null // Config de negocio (buildScheduleConfig). Null => usa los defaults legales actuales.
 ) {
   const outWeeks = [];
   let cursor = startOfISOWeek(fechaInicio);
@@ -348,6 +352,12 @@ export function generateScheduleForRange56(
     );
     return { schedule: [] };
   }
+
+  // Límites efectivos: lo que defina el panel, o el valor legal actual como fallback.
+  // Con la tabla ph_parametros_globales vacía, esto es idéntico al comportamiento previo.
+  const weeklyLegalLimit = Number(cfg?.limites?.legalSemanal ?? WEEKLY_LEGAL_LIMIT);
+  const weeklyExtraLimit = Number(cfg?.limites?.extraSemanal ?? WEEKLY_EXTRA_LIMIT);
+  const holidayHours = Number(cfg?.limites?.horasFestivoTrabajado ?? HOLIDAY_HOURS);
 
   while (cursor <= rangeEnd) {
     const weekStart = new Date(cursor);
@@ -417,8 +427,8 @@ export function generateScheduleForRange56(
     }
 
     const dayTotals = new Map();
-    let legalLeft = WEEKLY_LEGAL_LIMIT;
-    let extraLeft = WEEKLY_EXTRA_LIMIT;
+    let legalLeft = weeklyLegalLimit;
+    let extraLeft = weeklyExtraLimit;
 
     for (const day of workableDays) {
       const totals = { base: 0, extra: 0, total: 0 };
@@ -427,7 +437,7 @@ export function generateScheduleForRange56(
       const isHolidayWorked = day.isHoliday && day.override === "work";
 
       let targetTotalHours;
-      if (isHolidayWorked) targetTotalHours = HOLIDAY_HOURS; // 6h
+      if (isHolidayWorked) targetTotalHours = holidayHours; // festivo trabajado
       else if (isSaturday) targetTotalHours = isReduced ? 6 : 7; // 6h o 7h
       else targetTotalHours = isReduced ? 9 : 10; // 9h o 10h
 
@@ -467,7 +477,7 @@ export function generateScheduleForRange56(
       const absenceHours = absenceMinutes / 60;
       targetTotalHours = Math.max(0, targetTotalHours - absenceHours);
 
-      const dayLegalCap = getLegalCapForDay(day.wd);
+      const dayLegalCap = getLegalCapForDay(day.wd, cfg);
       const baseHours = Math.min(targetTotalHours, dayLegalCap, legalLeft);
       totals.base = baseHours;
       legalLeft -= baseHours;
@@ -542,4 +552,288 @@ export function generateScheduleForRange56(
   }
 
   return { schedule: outWeeks };
+}
+
+// ============================================================================
+// Generación por TURNO FIJO (spec: 07-16 / 09-18 con sábado derivado)
+// ----------------------------------------------------------------------------
+// Modelo determinista: cada colaborador tiene un turno base. L-V trabaja su
+// ventana menos 1h de descanso (8h netas legales); el sábado, la ventana
+// derivada continua (4h). Sin generación aleatoria ni día reducido. Las extras
+// NO se generan acá: son manuales (Fase 3).
+// ============================================================================
+
+// "07:00:00" (time de Supabase) o "07:00" -> "07:00"
+const normalizeHM = (t) => (typeof t === "string" ? t.slice(0, 5) : null);
+
+// Segmentos de trabajo de un turno en un día, descontando descansos.
+// withBreaks=true (L-V): desayuno 15' a las +2h y almuerzo 45' a las +5h => -1h.
+// withBreaks=false (sábado): bloque continuo, sin descanso.
+function buildShiftSegments(entrada, salida, withBreaks) {
+  const start = hmToMinutes(entrada);
+  const end = hmToMinutes(salida);
+  if (!(end > start)) return { segments: [], netHours: 0 };
+  if (!withBreaks) {
+    return {
+      segments: [{ from: start, to: end }],
+      netHours: (end - start) / 60,
+    };
+  }
+  const blocked = [
+    { start: start + 120, end: start + 120 + BREAKFAST_MINUTES },
+    { start: start + 300, end: start + 300 + LUNCH_MINUTES },
+  ];
+  const segments = subtractTimeRanges([{ from: start, to: end }], blocked);
+  const netHours =
+    segments.reduce((s, seg) => s + (seg.to - seg.from), 0) / 60;
+  return { segments, netHours };
+}
+
+function segmentsToBlocks(dateISO, segments) {
+  return segments.map((seg) => ({
+    start: `${dateISO}T${minutesToHM(seg.from)}:00`,
+    end: `${dateISO}T${minutesToHM(seg.to)}:00`,
+    hours: (seg.to - seg.from) / 60,
+  }));
+}
+
+const emptyDay = (ymd, wd, extra = {}) => ({
+  fecha: ymd,
+  descripcion: WD_NAME[wd],
+  horas: 0,
+  horas_base: 0,
+  horas_extra: 0,
+  bloques: null,
+  jornada_entrada: null,
+  jornada_salida: null,
+  jornada_reducida: false,
+  ...extra,
+});
+
+function buildDay(ymd, wd, segments, horasBase, extra = {}) {
+  const blocks = segmentsToBlocks(ymd, segments);
+  return {
+    fecha: ymd,
+    descripcion: WD_NAME[wd],
+    horas: horasBase,
+    horas_base: horasBase,
+    horas_extra: 0, // las extras son manuales (Fase 3)
+    bloques: blocks.length ? blocks : null,
+    jornada_entrada: segments.length ? minutesToHM(segments[0].from) : null,
+    jornada_salida: segments.length
+      ? minutesToHM(segments[segments.length - 1].to)
+      : null,
+    domingo_estado: null,
+    jornada_reducida: false,
+    es_festivo: false,
+    festivo_trabajado: false,
+    festivo_nombre: null,
+    ...extra,
+  };
+}
+
+// Rangos de estudio que afectan un día (para restarlos del turno). Spec 6.
+function collectStudyRanges(partialObservations, ymd, wd) {
+  const ranges = [];
+  for (const obs of partialObservations || []) {
+    if (!(ymd >= obs.start && ymd <= obs.end)) continue;
+    const list = obs.details?.dias_estudio;
+    if (!Array.isArray(list)) continue;
+    const dayConfig =
+      list.find((x) => x.fecha === ymd) || list.find((x) => x.dia === wd);
+    if (dayConfig?.inicio && dayConfig?.fin) {
+      const s = hmToMinutes(dayConfig.inicio);
+      const e = hmToMinutes(dayConfig.fin);
+      if (e > s) ranges.push({ start: s, end: e });
+    }
+  }
+  return ranges;
+}
+
+export function generateScheduleByShift(
+  fechaInicio,
+  fechaFin,
+  turno, // fila de ph_jornadas: { hora_entrada, hora_salida, sabado_entrada, sabado_salida, dias_aplica }
+  holidaySet,
+  holidayOverrides = {},
+  sundayOverrides = {},
+  partialObservations = [],
+  cfg = null
+) {
+  const outWeeks = [];
+  let cursor = startOfISOWeek(fechaInicio);
+  const rangeStart = parseISO(fechaInicio + "T00:00:00Z");
+  const rangeEnd = parseISO(fechaFin + "T00:00:00Z");
+  if (!cursor || !isValid(rangeStart) || !isValid(rangeEnd) || !turno) {
+    console.error("Datos inválidos para generar horario por turno:", {
+      fechaInicio,
+      fechaFin,
+      tieneTurno: Boolean(turno),
+    });
+    return { schedule: [] };
+  }
+
+  const entrada = normalizeHM(turno.hora_entrada);
+  const salida = normalizeHM(turno.hora_salida);
+  const sabEntrada = normalizeHM(turno.sabado_entrada);
+  const sabSalida = normalizeHM(turno.sabado_salida);
+  const diasAplica = Array.isArray(turno.dias_aplica)
+    ? turno.dias_aplica
+    : [1, 2, 3, 4, 5, 6];
+  const holidayHours = Number(
+    cfg?.limites?.horasFestivoTrabajado ?? HOLIDAY_HOURS
+  );
+
+  while (cursor <= rangeEnd) {
+    const weekStart = new Date(cursor);
+    const weekEnd = addDays(weekStart, 6);
+    const dias = [];
+
+    for (let i = 0; i < 7; i++) {
+      const d = addDays(weekStart, i);
+      const ymd = YMD(d);
+      if (!ymd || d < rangeStart || d > rangeEnd) continue;
+
+      const wd = isoWeekday(d);
+      const isSunday = wd === 7;
+      const isHoliday = holidaySet?.has?.(ymd);
+      const holidayOverride = holidayOverrides[ymd];
+
+      if (isHoliday && holidayOverride === "skip") continue;
+
+      // Domingo: no se trabaja.
+      if (isSunday) {
+        dias.push(
+          emptyDay(ymd, wd, {
+            domingo_estado: sundayOverrides[ymd] || null,
+          })
+        );
+        continue;
+      }
+
+      // Festivo trabajado: bloque único de holidayHours desde la entrada.
+      if (isHoliday && holidayOverride === "work") {
+        const start = hmToMinutes(entrada);
+        const segs = [{ from: start, to: start + holidayHours * 60 }];
+        dias.push(
+          buildDay(ymd, wd, segs, holidayHours, {
+            es_festivo: true,
+            festivo_trabajado: true,
+            festivo_nombre: holidaySet.get(ymd)?.name || "Festivo",
+          })
+        );
+        continue;
+      }
+
+      // ¿El turno aplica este día?
+      if (!diasAplica.includes(wd)) {
+        dias.push(emptyDay(ymd, wd, { es_festivo: Boolean(isHoliday) }));
+        continue;
+      }
+
+      const isSaturday = wd === 6;
+      const entradaDia = isSaturday ? sabEntrada : entrada;
+      const salidaDia = isSaturday ? sabSalida : salida;
+      if (!entradaDia || !salidaDia) {
+        dias.push(emptyDay(ymd, wd));
+        continue;
+      }
+
+      const full = buildShiftSegments(
+        entradaDia,
+        salidaDia,
+        !isSaturday // sábado sin descanso
+      );
+      let segments = full.segments;
+
+      // Estudio (parcial, spec 6.2): se quitan los rangos de estudio de la
+      // presencia física, pero el día queda CUBIERTO (se paga el turno completo).
+      let horasEstudio = 0;
+      const studyRanges = collectStudyRanges(partialObservations, ymd, wd);
+      if (studyRanges.length) {
+        segments = subtractTimeRanges(full.segments, studyRanges);
+        const presentNet =
+          segments.reduce((s, seg) => s + (seg.to - seg.from), 0) / 60;
+        horasEstudio = Math.round((full.netHours - presentNet) * 100) / 100;
+      }
+
+      // Tope legal del día (8 L-V / 4 Sáb). El día se paga completo (cubierto).
+      const horasBase = Math.min(full.netHours, getLegalCapForDay(wd, cfg));
+
+      // Compensación: el colaborador cubre hasta `tope` desde sus extras; resto, empresa.
+      let extraMeta = {};
+      if (horasEstudio > 0) {
+        const tope = Number(cfg?.compensacion?.topeEstudioColaborador ?? 4);
+        const compensaBanco = Math.min(horasEstudio, tope);
+        extraMeta = {
+          horas_estudio: horasEstudio,
+          estudio_compensa_banco: Math.round(compensaBanco * 100) / 100,
+          estudio_cubre_empresa:
+            Math.round((horasEstudio - compensaBanco) * 100) / 100,
+        };
+      }
+      dias.push(buildDay(ymd, wd, segments, horasBase, extraMeta));
+    }
+
+    outWeeks.push({
+      fecha_inicio: YMD(weekStart),
+      fecha_fin: YMD(weekEnd),
+      dias: dias.sort((a, b) => a.fecha.localeCompare(b.fecha)),
+      total_horas_semana: dias.reduce(
+        (s, dd) => s + (Number(dd.horas) || 0),
+        0
+      ),
+    });
+    cursor = addDays(weekStart, 7);
+  }
+  return { schedule: outWeeks };
+}
+
+// Bloques de un día EDITADO manualmente, respetando el turno del colaborador.
+// base = horas dentro del turno (con descansos L-V); extra = horas después de la
+// salida del turno. Determinista. Devuelve { bloques, entrada, salida }.
+export function buildEditedDayBlocks(ymd, turno, wd, totalHours) {
+  if (!turno || !(totalHours > 0) || wd === 7) {
+    return { bloques: null, entrada: null, salida: null };
+  }
+  const isSaturday = wd === 6;
+  const entrada = normalizeHM(
+    isSaturday ? turno.sabado_entrada : turno.hora_entrada
+  );
+  const salida = normalizeHM(
+    isSaturday ? turno.sabado_salida : turno.hora_salida
+  );
+  if (!entrada || !salida) {
+    return { bloques: null, entrada: null, salida: null };
+  }
+
+  const { segments: shiftSegs, netHours } = buildShiftSegments(
+    entrada,
+    salida,
+    !isSaturday
+  );
+  const baseHours = Math.min(totalHours, netHours);
+  const extraHours = Math.max(0, totalHours - netHours);
+
+  // Llenar las horas base dentro de los segmentos del turno (desde el inicio).
+  const segs = [];
+  let remaining = Math.round(baseHours * 60);
+  for (const seg of shiftSegs) {
+    if (remaining <= 0) break;
+    const take = Math.min(seg.to - seg.from, remaining);
+    segs.push({ from: seg.from, to: seg.from + take });
+    remaining -= take;
+  }
+  // Extra: bloque continuo después de la salida del turno.
+  if (extraHours > 0) {
+    const exitMin = hmToMinutes(salida);
+    segs.push({ from: exitMin, to: exitMin + Math.round(extraHours * 60) });
+  }
+
+  const bloques = segmentsToBlocks(ymd, segs);
+  return {
+    bloques: bloques.length ? bloques : null,
+    entrada: segs.length ? minutesToHM(segs[0].from) : null,
+    salida: segs.length ? minutesToHM(segs[segs.length - 1].to) : null,
+  };
 }

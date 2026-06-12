@@ -1,23 +1,34 @@
 import { supabaseAxios, storageClient } from "../services/supabaseAxios.js";
 import { Buffer } from "buffer";
 import { sendEmail } from "../services/emailService.js";
+import {
+  DEFAULT_SST_EMAILS,
+  DEFAULT_GENERAL_EMAILS,
+  TIPO_CRITICA,
+} from "../config/notificationDefaults.js";
 
-const NOTIFICATION_EMAILS_SST = [
-  // INCAPACIDADES Y RESTRICCIONES
-  "auxiliarsst@merkahorrosas.com",
-  "sistemageneralsst@merkahorrosas.com",
-  "analistajuniordh@merkahorrosas.com",
-  "analistadh@merkahorrosas.com",
-  "asistentegh@merkahorrosas.com",
-];
-
-const NOTIFICATION_EMAILS_GENERAL = ["asistentegh@merkahorrosas.com"]; //TODOS LOS EMAILS EXCEPTO INCAPACIDADES Y RESTRICCIONES
-
-const getRecipients = (tipo) => {
-  if (tipo === "Incapacidades" || tipo === "Restricciones/Recomendaciones") {
-    return NOTIFICATION_EMAILS_SST;
+// Resuelve los destinatarios de correo según el tipo de novedad.
+// Para novedades CRÍTICAS (Incapacidades / Restricciones) lee la lista
+// configurada en el panel (tabla ph_notificacion_destinatarios). Si la tabla
+// está vacía o falla la consulta, cae al fallback por defecto — nunca queda
+// sin destinatarios. El resto de novedades usa la lista general.
+const getRecipients = async (tipo) => {
+  const esCritica =
+    tipo === "Incapacidades" || tipo === "Restricciones/Recomendaciones";
+  if (!esCritica) return DEFAULT_GENERAL_EMAILS;
+  try {
+    const { data } = await supabaseAxios.get(
+      `/ph_notificacion_destinatarios?select=correo&tipo_novedad=eq.${TIPO_CRITICA}&activo=is.true`
+    );
+    const emails = (data || []).map((r) => r.correo).filter(Boolean);
+    return emails.length ? emails : DEFAULT_SST_EMAILS;
+  } catch (e) {
+    console.error(
+      "Error leyendo destinatarios desde DB, usando fallback:",
+      e?.message || e
+    );
+    return DEFAULT_SST_EMAILS;
   }
-  return NOTIFICATION_EMAILS_GENERAL;
 };
 
 const detectMimeAndExt = (buf) => {
@@ -333,7 +344,7 @@ export const createObservacion = async (req, res) => {
         cedula: "N/A",
       };
 
-      const recipients = getRecipients(tipo_novedad);
+      const recipients = await getRecipients(tipo_novedad);
       const subject = `[ALERTA] Nueva Novedad: ${tipo_novedad} para ${empleado.nombre_completo}`;
       const systemUrl = "https://merkahorro.com/programador-horarios";
       const htmlContent = `
@@ -558,7 +569,7 @@ export const updateObservacion = async (req, res) => {
 
     // 3. Lógica de Notificación por Correo (Siempre notifica, destinatario depende del tipo)
     try {
-      const recipients = getRecipients(tipo_novedad);
+      const recipients = await getRecipients(tipo_novedad);
       const subject = `[ACTUALIZACIÓN] Novedad: ${tipo_novedad} (ID: ${id})`;
       const systemUrl = "https://merkahorro.com/programador-horarios";
       const htmlContent = `

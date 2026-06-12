@@ -1,21 +1,23 @@
 // src/controllers/horariosController.js
 import { supabaseAxios } from "../services/supabaseAxios.js";
 import {
-  generateScheduleForRange56,
-  getDailyCapacity,
+  generateScheduleByShift,
+  buildEditedDayBlocks,
   isoWeekday,
   WEEKLY_LEGAL_LIMIT,
   WEEKLY_EXTRA_LIMIT,
-  WEEKLY_TOTAL_LIMIT,
   getDayInfo,
   allocateHoursRandomly,
   getLegalCapForDay, // <-- Importación correcta
   getRegularDailyCap, // <-- Importación correcta
   getPayableExtraCapForDay, // <-- Importación correcta
 } from "../utils/schedule.js";
+import { getJornadaBaseVigente } from "./phConfigController.js";
 import { getHolidaySet } from "../utils/holidays.js";
 import { format, parseISO, isValid, addDays } from "date-fns";
 import { sendEmail } from "../services/emailService.js";
+import { buildScheduleConfig } from "../services/phConfigService.js";
+import { getQuincenaRange } from "../utils/quincena.js";
 import {
   createOrUpdateExcess,
   fetchAllPendingForEmpleado,
@@ -26,6 +28,21 @@ import {
 // --- Constantes y Helpers ---
 const toFixedNumber = (value) => Number(Number(value || 0).toFixed(2));
 const MAX_OVERTIME_PER_DAY = 4;
+
+// Carga la config de negocio (límites del panel) sin romper la generación si la
+// BD falla o está vacía: en ese caso devuelve null y el motor usa sus defaults
+// legales. Así el cableado es no-destructivo hasta que un admin configure.
+const loadScheduleConfigSafe = async () => {
+  try {
+    return await buildScheduleConfig();
+  } catch (e) {
+    console.warn(
+      "No se pudo cargar config de horarios, usando defaults legales:",
+      e?.message || e
+    );
+    return null;
+  }
+};
 
 const BLOCKING_NOVEDADES = new Set([
   "Incapacidades",
@@ -346,6 +363,91 @@ export const getHorariosByEmpleadoId = async (req, res) => {
   }
 };
 
+// Núcleo reutilizable: acumulado de horas extra de la quincena de `fecha` vs.
+// el máximo configurable. Devuelve null si la fecha es inválida.
+const computeExtrasQuincena = async (empleadoId, fecha, cfg) => {
+  const rango = getQuincenaRange(fecha);
+  if (!rango) return null;
+  const { data } = await supabaseAxios.get(
+    `/horarios?select=dias&empleado_id=eq.${empleadoId}&estado_visibilidad=eq.publico&fecha_inicio=lte.${rango.fin}&fecha_fin=gte.${rango.inicio}`
+  );
+  let acumulado = 0;
+  for (const h of data || []) {
+    for (const dia of h.dias || []) {
+      if (dia.fecha >= rango.inicio && dia.fecha <= rango.fin) {
+        acumulado += Number(dia.horas_extra || 0);
+      }
+    }
+  }
+  acumulado = toFixedNumber(acumulado);
+  const maxRaw = cfg?.limites?.maxExtraPorQuincena;
+  const maximo = maxRaw == null || maxRaw === "" ? null : Number(maxRaw);
+  return {
+    quincena_inicio: rango.inicio,
+    quincena_fin: rango.fin,
+    acumulado,
+    maximo,
+    alcanzado: maximo != null && acumulado >= maximo,
+    superado: maximo != null && acumulado > maximo,
+  };
+};
+
+// Escribe auditoría (best-effort) para los días cuyo horario cambió. Spec 5.2 / 8.
+const writeAuditEntries = async ({
+  horarioId,
+  empleadoId,
+  previousMap,
+  nuevosDias,
+  usuario,
+  tipoCambio = "edicion_manual",
+}) => {
+  try {
+    const rows = [];
+    for (const d of nuevosDias) {
+      const prev = previousMap.get(d.fecha);
+      const prevH = Number(prev?.horas || 0);
+      const newH = Number(d.horas || 0);
+      const prevEnt = prev?.jornada_entrada ?? null;
+      const newEnt = d.jornada_entrada ?? null;
+      const prevSal = prev?.jornada_salida ?? null;
+      const newSal = d.jornada_salida ?? null;
+      if (prevH === newH && prevEnt === newEnt && prevSal === newSal) continue;
+      rows.push({
+        horario_id: horarioId,
+        empleado_id: empleadoId,
+        dia_afectado: d.fecha,
+        tipo_cambio: tipoCambio,
+        valor_anterior: { horas: prevH, entrada: prevEnt, salida: prevSal },
+        valor_nuevo: { horas: newH, entrada: newEnt, salida: newSal },
+        usuario_email: usuario?.email || null,
+        usuario_nombre: usuario?.nombre || usuario?.email || null,
+      });
+    }
+    if (rows.length) await supabaseAxios.post("/ph_auditoria_horario", rows);
+    return rows.length;
+  } catch (e) {
+    console.error("No se pudo escribir auditoría (no bloquea):", e?.message || e);
+    return 0;
+  }
+};
+
+// GET /horarios/extras-quincena/:empleado_id?fecha=YYYY-MM-DD  (spec 4.2)
+export const getExtrasQuincena = async (req, res) => {
+  const { empleado_id } = req.params;
+  const fecha = req.query.fecha || new Date().toISOString().slice(0, 10);
+  try {
+    const cfg = await loadScheduleConfigSafe();
+    const result = await computeExtrasQuincena(empleado_id, fecha, cfg);
+    if (!result) return res.status(400).json({ message: "Fecha inválida." });
+    res.json(result);
+  } catch (e) {
+    console.error("Error calculando extras de quincena:", e);
+    res
+      .status(500)
+      .json({ message: "Error calculando extras de quincena", error: e.message });
+  }
+};
+
 export const createHorario = async (req, res) => {
   try {
     const {
@@ -360,11 +462,6 @@ export const createHorario = async (req, res) => {
       creado_por,
     } = req.body;
 
-    if (!Array.isArray(working_weekdays) || working_weekdays.length === 0) {
-      return res
-        .status(400)
-        .json({ message: "working_weekdays es requerido." });
-    }
     const scheduleStart = parseDateOnly(fecha_inicio);
     const scheduleEnd = parseDateOnly(fecha_fin);
     if (!scheduleStart || !scheduleEnd)
@@ -407,14 +504,36 @@ export const createHorario = async (req, res) => {
     });
 
     const holidaySet = getHolidaySet(fecha_inicio, fecha_fin);
-    const { schedule: horariosSemanales } = generateScheduleForRange56(
+    const cfg = await loadScheduleConfigSafe();
+
+    // Turno base del colaborador (spec 3.1). Sin turno asignado no se puede generar.
+    const asignacion = await getJornadaBaseVigente(empleado_id);
+    const turno = asignacion?.ph_jornadas || null;
+    if (!turno) {
+      return res.status(409).json({
+        message:
+          "El colaborador no tiene un turno base asignado. Asígnale una jornada (07-16 o 09-18) antes de generar el horario.",
+      });
+    }
+
+    // Días efectivos: los del turno, opcionalmente acotados por working_weekdays.
+    let diasEfectivos = Array.isArray(turno.dias_aplica)
+      ? turno.dias_aplica
+      : [1, 2, 3, 4, 5, 6];
+    if (Array.isArray(working_weekdays) && working_weekdays.length) {
+      diasEfectivos = diasEfectivos.filter((d) => working_weekdays.includes(d));
+    }
+    const turnoEff = { ...turno, dias_aplica: diasEfectivos };
+
+    const { schedule: horariosSemanales } = generateScheduleByShift(
       fecha_inicio,
       fecha_fin,
-      working_weekdays,
+      turnoEff,
       holidaySet,
       holiday_overrides || {},
       sunday_overrides || {},
-      partialObservations
+      partialObservations,
+      cfg
     );
 
     let bankUpdates = [];
@@ -459,6 +578,44 @@ export const createHorario = async (req, res) => {
         semana_aplicada_inicio: update.semana_aplicada_inicio,
         semana_aplicada_fin: update.semana_aplicada_fin,
       });
+    }
+
+    // Compensación de estudio (spec 6.2): debitar del banco de horas hasta lo
+    // disponible. Lo que el banco no cubra queda como "sin cobertura" (la empresa
+    // ya cubre la porción > tope vía el metadato estudio_cubre_empresa del día).
+    let estudioCompensacion = null;
+    const totalCompensaBanco = toFixedNumber(
+      horariosSemanales.reduce(
+        (acc, w) =>
+          acc +
+          (w.dias || []).reduce(
+            (s, d) => s + Number(d.estudio_compensa_banco || 0),
+            0
+          ),
+        0
+      )
+    );
+    if (totalCompensaBanco > 0) {
+      const pendientes = await fetchAllPendingForEmpleado(empleado_id);
+      let restante = totalCompensaBanco;
+      let debitado = 0;
+      for (const entry of pendientes) {
+        if (restante <= 0) break;
+        const disp = Number(entry.horas_pendientes || 0);
+        if (disp <= 0) continue;
+        const take = Math.min(disp, restante);
+        await updateHoursBankEntry(entry.id, {
+          horas_pendientes: toFixedNumber(disp - take),
+          estado: disp - take > 0 ? "parcial" : "aplicado",
+        });
+        restante = toFixedNumber(restante - take);
+        debitado = toFixedNumber(debitado + take);
+      }
+      estudioCompensacion = {
+        requerido_del_banco: totalCompensaBanco,
+        debitado_del_banco: debitado,
+        sin_cobertura_banco: toFixedNumber(totalCompensaBanco - debitado),
+      };
     }
 
     let emailStatus = { sent: false, error: null, empleado: null };
@@ -518,6 +675,7 @@ export const createHorario = async (req, res) => {
       horarios: dataSemanales || [],
       email_notification: emailStatus,
       horas_compensadas: compensationSummaries,
+      compensacion_estudio: estudioCompensacion,
     });
   } catch (e) {
     console.error("Error detallado en createHorario:", e);
@@ -534,6 +692,15 @@ export const updateHorario = async (req, res) => {
   const { id } = req.params;
   const { dias } = req.body;
   try {
+    // Límites efectivos (panel o fallback legal). Mismo criterio que la generación.
+    const cfg = await loadScheduleConfigSafe();
+    const weeklyLegalLimit = Number(
+      cfg?.limites?.legalSemanal ?? WEEKLY_LEGAL_LIMIT
+    );
+    const weeklyExtraLimit = Number(
+      cfg?.limites?.extraSemanal ?? WEEKLY_EXTRA_LIMIT
+    );
+
     // 1. Obtener el horario actual
     const {
       data: [current],
@@ -550,6 +717,15 @@ export const updateHorario = async (req, res) => {
         message: "El payload debe incluir 'dias' como un arreglo válido.",
       });
     }
+
+    // Quién hace el cambio (para auditoría) y turno base (para bloques correctos).
+    const usuario = {
+      email: req.body?.usuario_email || req.user?.email || null,
+      nombre:
+        req.body?.usuario_nombre || req.body?.creado_por || req.user?.email || null,
+    };
+    const asignacion = await getJornadaBaseVigente(current.empleado_id);
+    const turno = asignacion?.ph_jornadas || null;
 
     // 2. Validar fechas y parsear días
     const parsedDays = dias
@@ -641,9 +817,9 @@ export const updateHorario = async (req, res) => {
     const previousWeeklyExcess = Math.max(
       0,
       toFixedNumber(
-        previousTotalHours - (WEEKLY_LEGAL_LIMIT + WEEKLY_EXTRA_LIMIT)
+        previousTotalHours - (weeklyLegalLimit + weeklyExtraLimit)
       )
-    ); // Exceso > 56h (Usando constantes)
+    ); // Exceso sobre el total semanal (legal + extra)
 
     // 5. Recalcular horas base, extra, bloques y deltas del banco
     const updatedDiasRecalculated = [];
@@ -698,7 +874,7 @@ export const updateHorario = async (req, res) => {
         }
       }
 
-      const legalCapForDay = getLegalCapForDay(wd);
+      const legalCapForDay = getLegalCapForDay(wd, cfg);
       const payableExtraCap = getPayableExtraCapForDay(wd);
 
       const base = Math.min(totalHours, legalCapForDay);
@@ -718,21 +894,35 @@ export const updateHorario = async (req, res) => {
       day.horas_extra = extra;
 
       if (totalHours > 0 && wd !== 7) {
-        const dayInfo = getDayInfo(
-          wd,
-          false,
-          null,
-          Boolean(day.jornada_reducida),
-          day.tipo_jornada_reducida || "salir-temprano"
-        );
-        const { blocks, entryTime, exitTime } = allocateHoursRandomly(
-          day.fecha,
-          dayInfo,
-          totalHours
-        );
-        day.bloques = blocks;
-        day.jornada_entrada = entryTime;
-        day.jornada_salida = exitTime;
+        if (turno) {
+          // Modelo nuevo: bloques según el turno del colaborador.
+          const { bloques, entrada, salida } = buildEditedDayBlocks(
+            day.fecha,
+            turno,
+            wd,
+            totalHours
+          );
+          day.bloques = bloques;
+          day.jornada_entrada = entrada;
+          day.jornada_salida = salida;
+        } else {
+          // Fallback (colaborador sin turno base): modelo anterior.
+          const dayInfo = getDayInfo(
+            wd,
+            false,
+            null,
+            Boolean(day.jornada_reducida),
+            day.tipo_jornada_reducida || "salir-temprano"
+          );
+          const { blocks, entryTime, exitTime } = allocateHoursRandomly(
+            day.fecha,
+            dayInfo,
+            totalHours
+          );
+          day.bloques = blocks;
+          day.jornada_entrada = entryTime;
+          day.jornada_salida = exitTime;
+        }
       } else {
         day.horas_base = 0;
         day.horas_extra = 0;
@@ -750,8 +940,8 @@ export const updateHorario = async (req, res) => {
     }
 
     // 6. Validaciones semanales
-    const legalLimit = Math.min(WEEKLY_LEGAL_LIMIT, legalCapacitySum);
-    const extraLimit = Math.min(WEEKLY_EXTRA_LIMIT, extraCapacitySum);
+    const legalLimit = Math.min(weeklyLegalLimit, legalCapacitySum);
+    const extraLimit = Math.min(weeklyExtraLimit, extraCapacitySum);
 
     if (payableExtraSum - extraLimit > 1e-6) {
       return res.status(400).json({
@@ -780,7 +970,7 @@ export const updateHorario = async (req, res) => {
     // 8. Actualizar (o resetear) registro en el banco de horas
     const weeklyExcesoTotal = Math.max(
       0,
-      toFixedNumber(totalSum - (WEEKLY_LEGAL_LIMIT + WEEKLY_EXTRA_LIMIT))
+      toFixedNumber(totalSum - (weeklyLegalLimit + weeklyExtraLimit))
     );
     const weeklyExcesoDelta = toFixedNumber(
       weeklyExcesoTotal - previousWeeklyExcess
@@ -816,13 +1006,43 @@ export const updateHorario = async (req, res) => {
       });
     }
 
-    // 9. Enviar respuesta exitosa
+    // 9. Auditoría de los cambios + aviso de extras por quincena (spec 5.2 / 4.2)
+    const cambiosAuditados = await writeAuditEntries({
+      horarioId: id,
+      empleadoId: current.empleado_id,
+      previousMap: previousDayMap,
+      nuevosDias: updatedDiasRecalculated,
+      usuario,
+    });
+
+    let extras_quincena = [];
+    try {
+      const q1 = await computeExtrasQuincena(
+        current.empleado_id,
+        current.fecha_inicio,
+        cfg
+      );
+      if (q1) extras_quincena.push(q1);
+      const q2 = await computeExtrasQuincena(
+        current.empleado_id,
+        current.fecha_fin,
+        cfg
+      );
+      if (q2 && q2.quincena_inicio !== q1?.quincena_inicio)
+        extras_quincena.push(q2);
+    } catch (_) {
+      /* el aviso de quincena no debe tumbar el guardado */
+    }
+
+    // 10. Enviar respuesta exitosa
     res.json({
       message: "Horario actualizado con éxito.",
       total_horas: totalSum,
       horas_legales: legalSum,
       horas_extras_pagables: payableExtraSum,
       horas_al_banco_registradas_neto: manualOvertimeToRegister,
+      cambios_auditados: cambiosAuditados,
+      extras_quincena,
     });
   } catch (e) {
     console.error("Error updating horarios:", e);
@@ -831,6 +1051,97 @@ export const updateHorario = async (req, res) => {
       error: e.response?.data?.message || e.message,
       details: e.response?.data || e.stack,
     });
+  }
+};
+
+// POST /horarios/intercambio  (spec 5.1: intercambio de turnos entre colaboradores)
+// Para una fecha, A pasa a trabajar la ventana de B y B la de A (mismas horas,
+// distinto horario). Recalcula bloques de ese día en ambos y audita el cambio.
+export const intercambiarTurnos = async (req, res) => {
+  const { empleado_a, empleado_b, fecha } = req.body;
+  if (!empleado_a || !empleado_b || !fecha) {
+    return res
+      .status(400)
+      .json({ message: "empleado_a, empleado_b y fecha son requeridos." });
+  }
+  if (empleado_a === empleado_b) {
+    return res
+      .status(400)
+      .json({ message: "Los colaboradores deben ser distintos." });
+  }
+  try {
+    const usuario = {
+      email: req.body?.usuario_email || req.user?.email || null,
+      nombre: req.body?.usuario_nombre || req.user?.email || null,
+    };
+    const wd = isoWeekday(parseDateOnly(fecha));
+
+    const [asigA, asigB] = await Promise.all([
+      getJornadaBaseVigente(empleado_a),
+      getJornadaBaseVigente(empleado_b),
+    ]);
+    const turnoA = asigA?.ph_jornadas || null;
+    const turnoB = asigB?.ph_jornadas || null;
+    if (!turnoA || !turnoB) {
+      return res.status(409).json({
+        message: "Ambos colaboradores deben tener un turno base asignado.",
+      });
+    }
+
+    // Aplica `nuevoTurno` al día `fecha` del horario público del colaborador.
+    const aplicarTurnoEnDia = async (empleadoId, nuevoTurno) => {
+      const { data } = await supabaseAxios.get(
+        `/horarios?select=id,dias&empleado_id=eq.${empleadoId}&estado_visibilidad=eq.publico&fecha_inicio=lte.${fecha}&fecha_fin=gte.${fecha}`
+      );
+      const horario = data?.[0];
+      if (!horario) return { ok: false, motivo: "sin horario en esa fecha" };
+      const dias = Array.isArray(horario.dias) ? horario.dias : [];
+      const prevMap = new Map(dias.map((d) => [d.fecha, { ...d }]));
+      const dia = dias.find((d) => d.fecha === fecha);
+      if (!dia) return { ok: false, motivo: "el día no está en el horario" };
+
+      const { bloques, entrada, salida } = buildEditedDayBlocks(
+        fecha,
+        nuevoTurno,
+        wd,
+        Number(dia.horas || 0)
+      );
+      dia.bloques = bloques;
+      dia.jornada_entrada = entrada;
+      dia.jornada_salida = salida;
+
+      const { error } = await supabaseAxios.patch(
+        `/horarios?id=eq.${horario.id}`,
+        { dias }
+      );
+      if (error) throw error;
+      await writeAuditEntries({
+        horarioId: horario.id,
+        empleadoId,
+        previousMap: prevMap,
+        nuevosDias: [dia],
+        usuario,
+        tipoCambio: "intercambio_turno",
+      });
+      return { ok: true };
+    };
+
+    const [ra, rb] = await Promise.all([
+      aplicarTurnoEnDia(empleado_a, turnoB),
+      aplicarTurnoEnDia(empleado_b, turnoA),
+    ]);
+    if (!ra.ok || !rb.ok) {
+      return res.status(409).json({
+        message: "No se pudo intercambiar (alguno no tiene horario ese día).",
+        detalle: { a: ra, b: rb },
+      });
+    }
+    res.json({ message: `Turnos intercambiados para ${fecha}`, fecha });
+  } catch (e) {
+    console.error("Error intercambiando turnos:", e);
+    res
+      .status(500)
+      .json({ message: "Error intercambiando turnos", error: e.message });
   }
 };
 
