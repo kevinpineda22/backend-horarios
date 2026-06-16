@@ -73,9 +73,21 @@ El turno es el molde; el horario son las semanas que salen del molde. El sábado
    - `ProgramadorHorarios.jsx`: los metadatos `horas_estudio`/`estudio_compensa_banco`/`estudio_cubre_empresa` se pasan a `extendedProps` (rama de día regular, el día de estudio se paga completo → cae ahí) y se pintan en `eventContentRenderer`: icono `FaGraduationCap`, pill "Estudio Xh · col. Yh / emp. Zh", línea de tooltip y clase `ph-study-day`. CSS en `ProgramadorHorarios.css` (`.ph-study-pill`, `.study-comp-icon`, `.ph-study-day`).
 3. ~~**Limpieza UI**~~ ✅ HECHO (2026-06-16)
    - Eliminado el selector de "día reducido" y "tipo de jornada reducida" de `WeekHistory.jsx` + props huérfanas (`reducedDay`/`reducedDayType`/`onReducedDay*`) en `WeekHistoryWrapper.jsx` y el estado/setters en `useScheduleEditing.js`. Se conservó la rama `else` del preview de edición (defaults 10/7) — eso es tech-debt aparte (reconciliar a quincena).
+4. ~~**Bug "Cancelar Creación"**~~ ✅ HECHO (2026-06-16)
+   - En `useScheduleManagement.js`, el try/catch de la consulta del banco atrapaba el throw de cancelación → el horario se creaba igual (pedía festivo y creaba). Ahora el try/catch envuelve SOLO la consulta; la cancelación del usuario aborta todo el flujo.
+5. ~~**Banco de Horas → "Extras Acumulados"**~~ ✅ RECONCILIADO (2026-06-16)
+   - El banco viejo (exceso sobre 56h/sem) se retiró. La pestaña pasó a `ExtrasAcumulados.jsx` + `.css`: por colaborador y quincena muestra el acumulado de extras vs. el máximo (spec 4.2, con color de alerta), el neto tras estudio, y el **desglose día por día** (qué día aportó cada extra / qué día de estudio descontó) — esto último responde el "porque el día X" que el banco viejo no podía.
 
-### Tech debt (cuando haya tiempo)
-- **`updateHorario`**: ✅ (2026-06-16) quitado el **bloqueo semanal de extras** (los `return 400` por tope extra/semana y por "legal incompleta"). Ahora los extras se controlan por **quincena** con alerta visual (spec 4.2), no se bloquea el guardado. Se conservan los topes **diarios** legales (8h L-V / 4h Sáb + máximo diario). **PENDIENTE**: el **banco de horas** (`createOrUpdateExcess`/`resetForSemana`, sección 8) sigue con el modelo de exceso semanal → reconciliar a quincena es un cambio mayor aparte (entrelazado con la compensación de estudio que debita del banco; hacer con smoke test).
+### Tech debt
+- ~~**`updateHorario`** + **banco de horas**~~ ✅ RECONCILIADO (2026-06-16) — ver "Reconciliación del banco" abajo.
+- **`updateHorario`**: (2026-06-16) quitado el **bloqueo semanal de extras**. Los extras se controlan por **quincena** con alerta visual (spec 4.2). Se conservan los topes **diarios** legales (8h L-V / 4h Sáb + máximo diario).
+
+### Reconciliación del banco a "extras reales acumulados" ✅ (2026-06-16)
+Decisión del usuario: el banco de horas (concepto del modelo viejo, NO está en la spec) se retira; el estudio descuenta de los **extras reales acumulados** (derivados de los días, `Σ horas_extra`), alineado a la spec 6.2.
+- **Fase 0** — Red de seguridad: `src/tests/schedule.estudio.test.js` (vitest), valida Casos 1 y 2 de la spec + regresión 44h. Correr: `TZ=UTC npx vitest run`. **28 tests verdes.**
+- **Fase 1** — `createHorario`: el estudio ya NO debita la tabla; reporta `compensacion_estudio: { cubierto_colaborador, cubierto_empresa }` desde los metadatos por día.
+- **Fase 2** — Retirado el banco viejo del backend: eliminados `applyBankedHours`, `apply_banked_hours`/`bank_entry_ids`, la sección 8 de `updateHorario` (`createOrUpdateExcess`/`resetForSemana` + `manualOvertime`), e imports muertos. `hoursBankController.js`/`routes/hoursBank.js` marcados **LEGACY** (read-only; ya no se escribe en `horas_compensacion`; la tabla se puede droppear cuando no haga falta el histórico).
+- **Fase 3** — Frontend: quitado el diálogo "¿aplicar banco?" de `useScheduleManagement.js`; pestaña reconvertida a `ExtrasAcumulados.jsx`.
 - ~~**`ALLOWED_EMAILS`** en `observacionesController`~~ ✅ HECHO (2026-06-16): removido el gmail personal hardcodeado; lista de GH ahora extensible por env `HR_ALLOWED_EMAILS` (CSV) con fallback a los 5 correos corporativos.
 
 ### Datos (los carga el usuario en Supabase/panel)

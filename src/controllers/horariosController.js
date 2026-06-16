@@ -4,8 +4,6 @@ import {
   generateScheduleByShift,
   buildEditedDayBlocks,
   isoWeekday,
-  WEEKLY_LEGAL_LIMIT,
-  WEEKLY_EXTRA_LIMIT,
   getDayInfo,
   allocateHoursRandomly,
   getLegalCapForDay, // <-- Importación correcta
@@ -18,12 +16,6 @@ import { format, parseISO, isValid, addDays } from "date-fns";
 import { sendEmail } from "../services/emailService.js";
 import { buildScheduleConfig } from "../services/phConfigService.js";
 import { getQuincenaRange } from "../utils/quincena.js";
-import {
-  createOrUpdateExcess,
-  fetchAllPendingForEmpleado,
-  updateEntry as updateHoursBankEntry,
-  resetForSemana,
-} from "./hoursBankController.js";
 
 // --- Constantes y Helpers ---
 const toFixedNumber = (value) => Number(Number(value || 0).toFixed(2));
@@ -203,144 +195,6 @@ const serializeObservationForResponse = (obs) => ({
   rawEnd: obs.rawEnd,
 });
 
-const applyBankedHours = (weeks, bankEntries) => {
-  if (
-    !Array.isArray(weeks) ||
-    weeks.length === 0 ||
-    !Array.isArray(bankEntries) ||
-    bankEntries.length === 0
-  ) {
-    return { bankUpdates: [], summaries: [] };
-  }
-  const weekSummariesMap = new Map();
-  const bankUpdates = [];
-
-  const shuffleDays = (days) => {
-    const arr = [...days];
-    for (let i = arr.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [arr[i], arr[j]] = [arr[j], arr[i]];
-    }
-    return arr;
-  };
-
-  for (const entry of bankEntries) {
-    let remaining = Number(
-      entry.horas_pendientes ?? entry.horas_excedidas ?? 0
-    );
-    if (remaining <= 0) continue;
-    let consumed = 0;
-    let firstAppliedWeekStart = null;
-    let lastAppliedWeekEnd = null;
-
-    for (const week of weeks) {
-      if (remaining <= 0) break;
-      let weekAppliedHours = 0;
-      const diasAjustadosEnSemana = [];
-      const candidates = shuffleDays(
-        (week.dias || []).filter(
-          (d) =>
-            isoWeekday(parseDateOnly(d.fecha)) !== 7 && Number(d.horas || 0) > 0
-        )
-      );
-
-      for (const day of candidates) {
-        if (remaining <= 0) break;
-        const wd = isoWeekday(parseDateOnly(day.fecha));
-        const originalHours = Number(day.horas || 0);
-        const originalExtra = Number(day.horas_extra || 0);
-        const originalBase = Number(day.horas_base || 0);
-        let extraRemoved = 0;
-        let baseRemoved = 0;
-
-        if (remaining > 0 && originalExtra > 0) {
-          extraRemoved = Math.min(originalExtra, remaining);
-          day.horas_extra = toFixedNumber(originalExtra - extraRemoved);
-          remaining = toFixedNumber(remaining - extraRemoved);
-          consumed = toFixedNumber(consumed + extraRemoved);
-          weekAppliedHours = toFixedNumber(weekAppliedHours + extraRemoved);
-        }
-
-        if (remaining > 0 && originalBase > 0) {
-          const currentBase = Math.max(
-            0,
-            toFixedNumber(originalHours - extraRemoved)
-          );
-          baseRemoved = Math.min(currentBase, originalBase, remaining);
-          day.horas_base = toFixedNumber(originalBase - baseRemoved);
-          remaining = toFixedNumber(remaining - baseRemoved);
-          consumed = toFixedNumber(consumed + baseRemoved);
-          weekAppliedHours = toFixedNumber(weekAppliedHours + baseRemoved);
-        }
-
-        if (extraRemoved > 0 || baseRemoved > 0) {
-          day.horas = toFixedNumber(day.horas_base + day.horas_extra);
-          day.horas_extra_reducidas = toFixedNumber(
-            Number(day.horas_extra_reducidas || 0) + extraRemoved
-          );
-          day.horas_legales_reducidas = toFixedNumber(
-            Number(day.horas_legales_reducidas || 0) + baseRemoved
-          );
-          day.banco_compensacion_id = entry.id;
-
-          const dayInfo = getDayInfo(
-            wd,
-            false,
-            null,
-            Boolean(day.jornada_reducida),
-            day.tipo_jornada_reducida || "salir-temprano"
-          );
-          const { blocks, entryTime, exitTime } = allocateHoursRandomly(
-            day.fecha,
-            dayInfo,
-            day.horas
-          );
-          day.bloques = blocks;
-          day.jornada_entrada = entryTime;
-          day.jornada_salida = exitTime;
-
-          diasAjustadosEnSemana.push({
-            fecha: day.fecha,
-            banco_id: entry.id,
-            horas_extra_reducidas: toFixedNumber(extraRemoved),
-            horas_legales_reducidas: toFixedNumber(baseRemoved),
-          });
-        }
-      } // Fin loop días
-
-      if (weekAppliedHours > 0) {
-        week.total_horas_semana = toFixedNumber(
-          (week.dias || []).reduce((sum, d) => sum + Number(d.horas || 0), 0)
-        );
-        firstAppliedWeekStart = firstAppliedWeekStart || week.fecha_inicio;
-        lastAppliedWeekEnd = week.fecha_fin;
-
-        const summaryKey = week.fecha_inicio;
-        if (!weekSummariesMap.has(summaryKey)) {
-          weekSummariesMap.set(summaryKey, {
-            semana_inicio: week.fecha_inicio,
-            semana_fin: week.fecha_fin,
-            dias: [],
-          });
-        }
-        weekSummariesMap.get(summaryKey).dias.push(...diasAjustadosEnSemana);
-      }
-    } // Fin loop semanas
-
-    if (consumed > 0) {
-      bankUpdates.push({
-        id: entry.id,
-        horas_consumidas: consumed,
-        horas_pendientes: remaining,
-        estado: remaining > 0 ? "parcial" : "aplicado",
-        semana_aplicada_inicio: firstAppliedWeekStart,
-        semana_aplicada_fin: lastAppliedWeekEnd,
-      });
-    }
-  } // Fin loop bankEntries
-  return { bankUpdates, summaries: Array.from(weekSummariesMap.values()) };
-};
-
 // --- Endpoints ---
 
 export const getHorariosByEmpleadoId = async (req, res) => {
@@ -482,8 +336,6 @@ export const createHorario = async (req, res) => {
       working_weekdays,
       holiday_overrides,
       sunday_overrides,
-      apply_banked_hours = false,
-      bank_entry_ids = [],
       creado_por,
     } = req.body;
 
@@ -561,21 +413,6 @@ export const createHorario = async (req, res) => {
       cfg
     );
 
-    let bankUpdates = [];
-    let compensationSummaries = [];
-    if (apply_banked_hours) {
-      const pendientes = await fetchAllPendingForEmpleado(empleado_id);
-      const selection = bank_entry_ids.length
-        ? pendientes.filter((p) => bank_entry_ids.includes(p.id))
-        : pendientes;
-      const { bankUpdates: updates, summaries } = applyBankedHours(
-        horariosSemanales,
-        selection
-      );
-      bankUpdates = updates;
-      compensationSummaries = summaries;
-    }
-
     await archivarHorariosPorEmpleado(empleado_id);
 
     const creatorValue =
@@ -596,52 +433,29 @@ export const createHorario = async (req, res) => {
       });
     if (errorSemanales) throw errorSemanales;
 
-    for (const update of bankUpdates) {
-      await updateHoursBankEntry(update.id, {
-        horas_pendientes: update.horas_pendientes,
-        estado: update.estado,
-        semana_aplicada_inicio: update.semana_aplicada_inicio,
-        semana_aplicada_fin: update.semana_aplicada_fin,
-      });
-    }
-
-    // Compensación de estudio (spec 6.2): debitar del banco de horas hasta lo
-    // disponible. Lo que el banco no cubra queda como "sin cobertura" (la empresa
-    // ya cubre la porción > tope vía el metadato estudio_cubre_empresa del día).
-    let estudioCompensacion = null;
-    const totalCompensaBanco = toFixedNumber(
-      horariosSemanales.reduce(
-        (acc, w) =>
-          acc +
-          (w.dias || []).reduce(
-            (s, d) => s + Number(d.estudio_compensa_banco || 0),
-            0
-          ),
-        0
-      )
-    );
-    if (totalCompensaBanco > 0) {
-      const pendientes = await fetchAllPendingForEmpleado(empleado_id);
-      let restante = totalCompensaBanco;
-      let debitado = 0;
-      for (const entry of pendientes) {
-        if (restante <= 0) break;
-        const disp = Number(entry.horas_pendientes || 0);
-        if (disp <= 0) continue;
-        const take = Math.min(disp, restante);
-        await updateHoursBankEntry(entry.id, {
-          horas_pendientes: toFixedNumber(disp - take),
-          estado: disp - take > 0 ? "parcial" : "aplicado",
-        });
-        restante = toFixedNumber(restante - take);
-        debitado = toFixedNumber(debitado + take);
-      }
-      estudioCompensacion = {
-        requerido_del_banco: totalCompensaBanco,
-        debitado_del_banco: debitado,
-        sin_cobertura_banco: toFixedNumber(totalCompensaBanco - debitado),
-      };
-    }
+    // Compensación de estudio (spec 6.2): el día de estudio se paga COMPLETO; la
+    // parte que cubre el COLABORADOR sale de sus EXTRAS acumulados (metadato
+    // estudio_compensa_banco por día, topeado por parámetro) y el resto lo cubre
+    // la EMPRESA (estudio_cubre_empresa). Los "extras acumulados" son un valor
+    // DERIVADO de los días registrados (ver computeExtrasQuincena), NO una tabla
+    // de saldo: por eso acá no se debita nada, solo se reporta el resumen.
+    const sumarMetadatoEstudio = (campo) =>
+      toFixedNumber(
+        horariosSemanales.reduce(
+          (acc, w) =>
+            acc + (w.dias || []).reduce((s, d) => s + Number(d[campo] || 0), 0),
+          0
+        )
+      );
+    const cubiertoColaborador = sumarMetadatoEstudio("estudio_compensa_banco");
+    const cubiertoEmpresa = sumarMetadatoEstudio("estudio_cubre_empresa");
+    const estudioCompensacion =
+      cubiertoColaborador > 0 || cubiertoEmpresa > 0
+        ? {
+            cubierto_colaborador: cubiertoColaborador,
+            cubierto_empresa: cubiertoEmpresa,
+          }
+        : null;
 
     let emailStatus = { sent: false, error: null, empleado: null };
     try {
@@ -699,7 +513,6 @@ export const createHorario = async (req, res) => {
     res.status(201).json({
       horarios: dataSemanales || [],
       email_notification: emailStatus,
-      horas_compensadas: compensationSummaries,
       compensacion_estudio: estudioCompensacion,
     });
   } catch (e) {
@@ -719,12 +532,6 @@ export const updateHorario = async (req, res) => {
   try {
     // Límites efectivos (panel o fallback legal). Mismo criterio que la generación.
     const cfg = await loadScheduleConfigSafe();
-    const weeklyLegalLimit = Number(
-      cfg?.limites?.legalSemanal ?? WEEKLY_LEGAL_LIMIT
-    );
-    const weeklyExtraLimit = Number(
-      cfg?.limites?.extraSemanal ?? WEEKLY_EXTRA_LIMIT
-    );
 
     // 1. Obtener el horario actual
     const {
@@ -832,29 +639,15 @@ export const updateHorario = async (req, res) => {
       }
     }
 
-    // 4. Preparar datos previos para deltas del banco
+    // 4. Datos previos (para la auditoría: comparar antes → después).
     const previousDays = Array.isArray(current?.dias) ? current.dias : [];
     const previousDayMap = new Map(previousDays.map((day) => [day.fecha, day]));
-    const previousTotalHours = previousDays.reduce(
-      (sum, day) => sum + Number(day.horas || 0),
-      0
-    );
-    const previousWeeklyExcess = Math.max(
-      0,
-      toFixedNumber(
-        previousTotalHours - (weeklyLegalLimit + weeklyExtraLimit)
-      )
-    ); // Exceso sobre el total semanal (legal + extra)
 
-    // 5. Recalcular horas base, extra, bloques y deltas del banco
+    // 5. Recalcular horas base, extra y bloques.
     const updatedDiasRecalculated = [];
-    // const allowOvertime = Boolean(req.body.allow_overtime); // <-- Esta línea ya no es necesaria
     let legalSum = 0,
       payableExtraSum = 0,
       totalSum = 0;
-    let manualOvertimeDelta = 0,
-      manualOvertimeTotal = 0;
-    const manualOvertimeDetails = [];
 
     for (const dayDataFromFrontend of parsedDays) {
       const day = { ...dayDataFromFrontend };
@@ -868,33 +661,6 @@ export const updateHorario = async (req, res) => {
         return res.status(400).json({
           message: `Límite diario (${overtimeLimit}h) excedido en ${day.fecha}`,
         });
-      }
-
-      if (regularCap > 0) {
-        const previousDayInfo = previousDayMap.get(day.fecha);
-        const previousHours = Number(previousDayInfo?.horas || 0);
-        const prevOverRegular = Math.max(
-          0,
-          toFixedNumber(previousHours - regularCap)
-        );
-        const newOverRegular = Math.max(
-          0,
-          toFixedNumber(totalHours - regularCap)
-        );
-        manualOvertimeTotal = toFixedNumber(
-          manualOvertimeTotal + newOverRegular
-        );
-        const deltaOver = toFixedNumber(newOverRegular - prevOverRegular);
-        if (deltaOver !== 0) {
-          manualOvertimeDelta = toFixedNumber(manualOvertimeDelta + deltaOver);
-          manualOvertimeDetails.push({
-            fecha: day.fecha,
-            limite_regular_diario: regularCap,
-            horas_previas: toFixedNumber(previousHours),
-            horas_nuevas: toFixedNumber(totalHours),
-            excedente_delta: deltaOver,
-          });
-        }
       }
 
       const legalCapForDay = getLegalCapForDay(wd, cfg);
@@ -958,13 +724,9 @@ export const updateHorario = async (req, res) => {
     }
 
     // 6. Control de extras: la spec (4.2) los controla por QUINCENA con ALERTA
-    //    VISUAL, no por bloqueo semanal. El aviso de quincena se calcula en la
-    //    sección 9 y la UI muestra el toast. Por eso acá NO se bloquea el guardado
-    //    por tope semanal de extras (modelo viejo). Lo que SÍ se mantiene son los
-    //    topes DIARIOS legales (jornada 8h L-V / 4h Sáb + máximo diario), validados
-    //    por día en el bucle anterior (getLegalCapForDay / overtimeLimit).
-    //    NOTA tech-debt: el banco de horas (sección 8) sigue con el modelo de
-    //    exceso semanal; reconciliarlo a quincena es un cambio aparte mayor.
+    //    VISUAL (sección 8), no por bloqueo semanal ni banco. Acá solo se aplican
+    //    los topes DIARIOS legales (jornada 8h L-V / 4h Sáb + máximo diario),
+    //    validados por día en el bucle anterior (getLegalCapForDay / overtimeLimit).
 
     // 7. Preparar payload final y actualizar horario
     const updatePayload = {
@@ -978,46 +740,7 @@ export const updateHorario = async (req, res) => {
     );
     if (updateError) throw updateError;
 
-    // 8. Actualizar (o resetear) registro en el banco de horas
-    const weeklyExcesoTotal = Math.max(
-      0,
-      toFixedNumber(totalSum - (weeklyLegalLimit + weeklyExtraLimit))
-    );
-    const weeklyExcesoDelta = toFixedNumber(
-      weeklyExcesoTotal - previousWeeklyExcess
-    );
-    const manualOvertimeDeltaNeto = toFixedNumber(manualOvertimeDelta);
-    const manualOvertimeTotalRounded = toFixedNumber(manualOvertimeTotal);
-    const manualOvertimeToRegister = Math.max(
-      0,
-      toFixedNumber(manualOvertimeDeltaNeto - Math.max(0, weeklyExcesoDelta))
-    );
-
-    if (weeklyExcesoDelta > 0) {
-      await createOrUpdateExcess({
-        empleadoId: current.empleado_id,
-        semanaInicio: current.fecha_inicio,
-        semanaFin: current.fecha_fin,
-        horasExcedidas: weeklyExcesoDelta,
-      });
-    }
-    if (manualOvertimeToRegister > 0) {
-      await createOrUpdateExcess({
-        empleadoId: current.empleado_id,
-        semanaInicio: current.fecha_inicio,
-        semanaFin: current.fecha_fin,
-        horasExcedidas: manualOvertimeToRegister,
-      });
-    }
-    if (weeklyExcesoTotal <= 0 && manualOvertimeTotalRounded <= 0) {
-      await resetForSemana({
-        empleadoId: current.empleado_id,
-        semanaInicio: current.fecha_inicio,
-        semanaFin: current.fecha_fin,
-      });
-    }
-
-    // 9. Auditoría de los cambios + aviso de extras por quincena (spec 5.2 / 4.2)
+    // 8. Auditoría de los cambios + aviso de extras por quincena (spec 5.2 / 4.2)
     const cambiosAuditados = await writeAuditEntries({
       horarioId: id,
       empleadoId: current.empleado_id,
@@ -1051,7 +774,6 @@ export const updateHorario = async (req, res) => {
       total_horas: totalSum,
       horas_legales: legalSum,
       horas_extras_pagables: payableExtraSum,
-      horas_al_banco_registradas_neto: manualOvertimeToRegister,
       cambios_auditados: cambiosAuditados,
       extras_quincena,
     });

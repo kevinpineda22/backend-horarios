@@ -1,3 +1,7 @@
+// ⚠️ LEGACY — Banco de horas del modelo anterior (exceso sobre 56h/semana).
+// Ya NO se escribe desde el flujo de horarios: la spec descuenta el estudio de los
+// EXTRAS reales acumulados (derivados de los días) y controla extras por quincena.
+// Se mantiene solo para lectura del histórico; eliminar con la tabla cuando no haga falta.
 import { supabaseAxios } from "../services/supabaseAxios.js";
 
 const mapRow = (row) => {
