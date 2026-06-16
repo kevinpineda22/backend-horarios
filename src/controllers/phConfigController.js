@@ -7,6 +7,7 @@
 import { supabaseAxios } from "../services/supabaseAxios.js";
 import { invalidatePhConfigCache } from "../services/phConfigService.js";
 import { DEFAULT_SST_EMAILS, TIPO_CRITICA } from "../config/notificationDefaults.js";
+import { writeAuditEvent } from "../utils/auditoria.js";
 
 const REPRESENTATION = { headers: { Prefer: "return=representation" } };
 
@@ -159,6 +160,17 @@ export const updateJornada = async (req, res) => {
 export const deleteJornada = async (req, res) => {
   const { id } = req.params;
   try {
+    // No se puede borrar un turno que tenga colaboradores asignados (FK restrict).
+    // Devolvemos un mensaje claro en lugar del error crudo de base de datos.
+    const { data: asignados } = await supabaseAxios.get(
+      `/ph_asignacion_jornada?select=empleado_id&jornada_id=eq.${id}&limit=1`
+    );
+    if (Array.isArray(asignados) && asignados.length > 0) {
+      return res.status(409).json({
+        message:
+          "No se puede eliminar este turno porque hay colaboradores que lo tienen asignado como turno base. Reasigná esos colaboradores a otro turno antes de eliminarlo.",
+      });
+    }
     const { error } = await supabaseAxios.delete(`/ph_jornadas?id=eq.${id}`);
     if (error) throw error;
     invalidatePhConfigCache();
@@ -186,9 +198,51 @@ export const listSedesConCupos = async (_req, res) => {
       (acc[c.sede_id] ||= {})[c.jornada_id] = c.cupos;
       return acc;
     }, {});
-    res.json(sedes.map((s) => ({ ...s, cupos_por_turno: bySede[s.id] || {} })));
+
+    // Visibilidad en el Programador (tabla propia, opcional). Si no existe la
+    // tabla o una sede no tiene fila, se considera VISIBLE por defecto.
+    let ocultas = new Set();
+    try {
+      const { data: vis } = await supabaseAxios.get(
+        `/ph_sede_visibilidad?select=sede_id,visible`
+      );
+      ocultas = new Set(
+        (vis || []).filter((v) => v.visible === false).map((v) => v.sede_id)
+      );
+    } catch (_) {
+      /* tabla aún no creada: todas visibles */
+    }
+
+    res.json(
+      sedes.map((s) => ({
+        ...s,
+        cupos_por_turno: bySede[s.id] || {},
+        visible: !ocultas.has(s.id),
+      }))
+    );
   } catch (e) {
     handleError(res, e, "Error listando sedes");
+  }
+};
+
+// Marca una sede como visible/oculta en el Programador. NO toca la tabla
+// compartida `sedes`: usa la tabla propia `ph_sede_visibilidad`.
+export const setSedeVisibilidad = async (req, res) => {
+  const { id: sede_id } = req.params;
+  const { visible } = req.body;
+  if (typeof visible !== "boolean") {
+    return res.status(400).json({ message: "visible (boolean) es requerido." });
+  }
+  try {
+    const { error } = await supabaseAxios.post(
+      `/ph_sede_visibilidad?on_conflict=sede_id`,
+      [{ sede_id, visible }],
+      { headers: { Prefer: "resolution=merge-duplicates,return=representation" } }
+    );
+    if (error) throw error;
+    res.json({ message: "Visibilidad actualizada.", sede_id, visible });
+  } catch (e) {
+    handleError(res, e, "Error actualizando visibilidad de sede");
   }
 };
 
@@ -217,6 +271,55 @@ export const updateSedeCupos = async (req, res) => {
     res.status(200).json({ message: "Cupos actualizados.", sede_id, cupos_por_turno });
   } catch (e) {
     handleError(res, e, "Error guardando cupos de sede");
+  }
+};
+
+// Tablero de una sede (Vista por Sede / Kanban): colaboradores activos con su
+// turno base VIGENTE, el catálogo de turnos (con su sábado derivado) y los cupos
+// 2+2. Una sola llamada en lugar de N (una por colaborador).
+export const getSedePanel = async (req, res) => {
+  const { sede_id } = req.params;
+  try {
+    const [empRes, jornRes, cupoRes] = await Promise.all([
+      supabaseAxios.get(
+        `/empleados?select=id,nombre_completo,cedula&sede_id=eq.${sede_id}&estado=eq.activo&order=nombre_completo.asc`
+      ),
+      supabaseAxios.get(
+        `/ph_jornadas?select=id,nombre,hora_entrada,hora_salida,sabado_entrada,sabado_salida&activo=is.true&order=nombre.asc`
+      ),
+      supabaseAxios.get(
+        `/ph_sede_config?select=jornada_id,cupos&sede_id=eq.${sede_id}`
+      ),
+    ]);
+    const empleados = empRes.data || [];
+    const jornadas = jornRes.data || [];
+    const cupos = (cupoRes.data || []).reduce((acc, c) => {
+      acc[c.jornada_id] = Number(c.cupos) || 0;
+      return acc;
+    }, {});
+
+    // Turno vigente por colaborador (vigente_hasta null = vigente).
+    let vigentePorEmpleado = {};
+    if (empleados.length) {
+      const ids = empleados.map((e) => e.id).join(",");
+      const { data: asigs } = await supabaseAxios.get(
+        `/ph_asignacion_jornada?select=empleado_id,jornada_id&vigente_hasta=is.null&empleado_id=in.(${ids})`
+      );
+      vigentePorEmpleado = (asigs || []).reduce((acc, a) => {
+        acc[a.empleado_id] = a.jornada_id;
+        return acc;
+      }, {});
+    }
+
+    res.json({
+      jornadas: jornadas.map((j) => ({ ...j, cupo: cupos[j.id] ?? null })),
+      colaboradores: empleados.map((e) => ({
+        ...e,
+        jornada_id: vigentePorEmpleado[e.id] || null,
+      })),
+    });
+  } catch (e) {
+    handleError(res, e, "Error armando el tablero de la sede");
   }
 };
 
@@ -279,6 +382,9 @@ export const asignarJornada = async (req, res) => {
     });
   }
   try {
+    // Turno anterior vigente (para la auditoría) ANTES de cerrarlo.
+    const turnoPrevio = await getJornadaBaseVigente(empleado_id);
+
     // Cerrar la asignación vigente anterior en la fecha de inicio de la nueva.
     await supabaseAxios.patch(
       `/ph_asignacion_jornada?empleado_id=eq.${empleado_id}&vigente_hasta=is.null`,
@@ -297,6 +403,27 @@ export const asignarJornada = async (req, res) => {
       REPRESENTATION
     );
     if (error) throw error;
+
+    // Auditoría: cambio de turno base (spec 5.2 / 8).
+    try {
+      const { data: jNueva } = await supabaseAxios.get(
+        `/ph_jornadas?select=nombre&id=eq.${jornada_id}`
+      );
+      await writeAuditEvent({
+        empleadoId: empleado_id,
+        tipoCambio: "asignacion_turno",
+        valorAnterior: {
+          turno: turnoPrevio?.ph_jornadas?.nombre || "sin turno previo",
+        },
+        valorNuevo: {
+          turno: jNueva?.[0]?.nombre || jornada_id,
+          desde: vigente_desde,
+        },
+        usuario: { email: req.user?.email || null, nombre: req.user?.email || null },
+      });
+    } catch (_) {
+      /* la auditoría no debe tumbar la asignación */
+    }
 
     // Alerta blanda 2+2 (best-effort: si falla, no bloquea la asignación).
     let alerta = null;

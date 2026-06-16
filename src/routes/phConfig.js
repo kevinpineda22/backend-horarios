@@ -26,6 +26,10 @@ router.delete("/jornadas/:id", ctrl.deleteJornada);
 router.get("/sedes", ctrl.listSedesConCupos);
 // Guarda todos los cupos de una sede de una sola vez.
 router.put("/sedes/:id", ctrl.updateSedeCupos);
+// Tablero de la sede (Vista por Sede): colaboradores + turno vigente + cupos.
+router.get("/sedes/:sede_id/panel", ctrl.getSedePanel);
+// Mostrar/ocultar una sede en el Programador (tabla propia, no toca `sedes`).
+router.put("/sedes/:id/visibilidad", ctrl.setSedeVisibilidad);
 
 // Asignación de turno base por colaborador (con historial de vigencia)
 router.get("/asignaciones/:empleado_id", ctrl.listAsignaciones);

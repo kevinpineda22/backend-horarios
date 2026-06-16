@@ -16,6 +16,7 @@ import { format, parseISO, isValid, addDays } from "date-fns";
 import { sendEmail } from "../services/emailService.js";
 import { buildScheduleConfig } from "../services/phConfigService.js";
 import { getQuincenaRange } from "../utils/quincena.js";
+import { writeAuditEvent } from "../utils/auditoria.js";
 
 // --- Constantes y Helpers ---
 const toFixedNumber = (value) => Number(Number(value || 0).toFixed(2));
@@ -510,6 +511,18 @@ export const createHorario = async (req, res) => {
       emailStatus.error = `Error enviando correo: ${emailError.message}`;
     }
 
+    // Auditoría: generación de horario (spec 5.2 / 8).
+    await writeAuditEvent({
+      empleadoId: empleado_id,
+      tipoCambio: "creacion_horario",
+      valorNuevo: {
+        accion: "Horario generado",
+        rango: `${fecha_inicio} → ${fecha_fin}`,
+        semanas: (dataSemanales || []).length,
+      },
+      usuario: { nombre: creatorValue, email: null },
+    });
+
     res.status(201).json({
       horarios: dataSemanales || [],
       email_notification: emailStatus,
@@ -882,6 +895,12 @@ export const intercambiarTurnos = async (req, res) => {
 export const deleteHorario = async (req, res) => {
   const { id } = req.params;
   try {
+    // Leemos el horario antes de borrarlo, para dejar constancia en la auditoría.
+    const { data: previo } = await supabaseAxios.get(
+      `/horarios?select=empleado_id,fecha_inicio,fecha_fin&id=eq.${id}`
+    );
+    const horarioPrevio = previo?.[0] || null;
+
     const { error, count } = await supabaseAxios.delete(
       `/horarios?id=eq.${id}`,
       { count: "exact" }
@@ -893,6 +912,24 @@ export const deleteHorario = async (req, res) => {
         .status(204)
         .json({ message: "Horario no encontrado o ya eliminado." });
     }
+
+    // Auditoría: eliminación de horario (spec 5.2 / 8).
+    if (horarioPrevio) {
+      await writeAuditEvent({
+        horarioId: id,
+        empleadoId: horarioPrevio.empleado_id,
+        tipoCambio: "eliminacion_horario",
+        valorAnterior: {
+          accion: "Horario eliminado",
+          rango: `${horarioPrevio.fecha_inicio} → ${horarioPrevio.fecha_fin}`,
+        },
+        usuario: {
+          email: req.body?.usuario_email || null,
+          nombre: req.body?.usuario_nombre || req.body?.usuario_email || null,
+        },
+      });
+    }
+
     res.json({ message: "Horario eliminado correctamente" });
   } catch (e) {
     console.error("Error eliminando horario:", e);
