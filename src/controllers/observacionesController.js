@@ -682,14 +682,24 @@ export const getObservacionesStats = async (req, res) => {
   }
 };
 
-// --- LISTA CENTRALIZADA DE PERMISOS ---
-const ALLOWED_EMAILS = [
+// --- LISTA CENTRALIZADA DE PERMISOS (rol Gestión Humana) ---
+// Correos corporativos con acceso de GH. Se puede EXTENDER sin tocar el código
+// mediante la env `HR_ALLOWED_EMAILS` (lista separada por comas). Antes había un
+// gmail personal hardcodeado acá: se removió por seguridad; si se necesita dar
+// acceso a un correo puntual, agregarlo en `HR_ALLOWED_EMAILS` (Vercel).
+const DEFAULT_HR_EMAILS = [
   "auxiliarsst@merkahorrosas.com",
   "sistemageneralsst@merkahorrosas.com",
   "analistajuniordh@merkahorrosas.com",
   "analistadh@merkahorrosas.com",
   "asistentegh@merkahorrosas.com",
-  "johanmerkahorro777@gmail.com",
+];
+const ALLOWED_EMAILS = [
+  ...DEFAULT_HR_EMAILS,
+  ...(process.env.HR_ALLOWED_EMAILS || "")
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean),
 ];
 
 export const checkPermissions = (req, res) => {

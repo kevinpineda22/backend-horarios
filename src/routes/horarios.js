@@ -18,6 +18,13 @@ router.patch("/archivar", ctrl.archivarHorarios);
 router.get("/extras-quincena/:empleado_id", ctrl.getExtrasQuincena);
 
 /**
+ * GET /api/horarios/auditoria/:empleado_id?horario_id=&limit=
+ * Historial de cambios auditados: quién, cuándo, antes → después (spec 5.2 / 8).
+ * Debe ir antes de la ruta genérica /:empleado_id.
+ */
+router.get("/auditoria/:empleado_id", ctrl.getAuditoria);
+
+/**
  * GET  /api/horarios/:empleado_id/completo
  * Devuelve el historial completo de horarios de un empleado (incluyendo archivados)
  */

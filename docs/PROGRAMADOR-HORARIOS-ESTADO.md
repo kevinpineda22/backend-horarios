@@ -1,117 +1,134 @@
-# Programador de Horarios — Estado de implementación
+# Programador de Horarios — Estado del proyecto
 
-> Doc vivo. Se actualiza en cada avance. Fuente única de verdad spec → código.
-> Última actualización: 2026-06-12.
+> Doc vivo. Fuente única de verdad spec → código. Última actualización: 2026-06-12.
+> **Si retomás el proyecto, leé este doc primero.** La sección "👉 QUÉ FALTA" es el punto de continuación.
 
-## Decisiones tomadas
+---
+
+## 0. Resumen en 30 segundos
+
+- Se reescribió el módulo al modelo de la **Especificación Técnica**: **turnos fijos** (07:00–16:00 / 09:00–18:00) por colaborador, con sábado derivado, extras por quincena, edición auditada, compensación de estudio e incapacidad con notificación.
+- **Backend: COMPLETO y verificado** en todas las secciones de la spec. Está commiteado y desplegado en Vercel (`backend-horarios-lake.vercel.app`).
+- **Frontend: 100% de la spec en código** (2026-06-16): vista de auditoría, compensación de estudio en el calendario y limpieza de UI vieja ya hechas. Queda solo tech-debt (reconciliar el preview de edición a quincena). Los cambios viven en la rama **`Johan`** (repo `Pagina-web_React`); el grueso ya está commiteado, los últimos 3 (auditoría/estudio/limpieza) están **en el working tree sin commitear**.
+- Se prueba con: **frontend local** (`npm run dev`) → **backend de Vercel**. No hace falta desplegar el frontend para probar; sí para que lo usen los usuarios reales en merkahorro.com.
+
+---
+
+## 1. El modelo (clave para entender todo)
+
+| | Qué es | De quién depende | Dónde se gestiona |
+|---|---|---|---|
+| **Turno** (jornada base) | Franja FIJA: 07-16 o 09-18 | de la **persona** | Programador → panel "Turno base" (`TurnoBaseEmpleado`) |
+| **Horario** | Calendario concreto de X semanas (días, horas, bloques) | se **deriva** del turno + fechas | Programador → generar/editar |
+
+El turno es el molde; el horario son las semanas que salen del molde. El sábado se deriva del turno (regla 2.3).
+
+---
+
+## 2. Decisiones tomadas
 
 | Tema | Decisión |
 |------|----------|
-| Modelo de horario | **Turnos fijos** (07:00–16:00 / 09:00–18:00), NO el motor de horas variables anterior |
-| Turno base por colaborador | Con **historial de vigencia** (`ph_asignacion_jornada`, vigente_desde/hasta) |
-| Distribución 2+2 por sede | **Alerta blanda** (avisa, no bloquea) |
-| Destinatarios de novedades | DB-driven (`ph_notificacion_destinatarios`, tipo `critica`) con fallback |
-| Límites legales | Cableados a `ph_parametros_globales` con fallback a constantes |
+| Modelo | Turnos fijos (NO el motor de horas variables anterior) |
+| Turno base | Con historial de vigencia (`ph_asignacion_jornada`) |
+| Distribución 2+2 por sede | Alerta blanda (avisa, no bloquea) |
+| Destinatarios novedades | DB-driven (`ph_notificacion_destinatarios`, tipo `critica`) con fallback a la lista SST hardcodeada |
+| Reglas (límites, topes) | Configurables vía `ph_parametros_globales` con fallback a los valores legales |
+| Compensación estudio | Día cubierto (pago completo); el colaborador cubre `min(horas_estudio, tope)` desde el banco, el resto la empresa. Tope = param `horas_estudio_colaborador` (default 4) |
+| Tab "Jornadas" | Editable (se arregló el mapeo de días) |
 
-## Hallazgo raíz
+---
 
-El schema original estaba bien diseñado PARA esta spec, pero **nada estaba cableado**:
-el motor usaba constantes hardcodeadas y el subsistema de config (`ph_*`) no se
-consumía. `ph_jornadas` ya trae `sabado_entrada/salida` (regla 2.3) y `ph_sede_config`
-ya modela la distribución 2+2. El trabajo es CONECTAR + reescribir el motor.
+## 3. Cumplimiento de la spec (estado actual)
 
-## Estado por sección de la spec
+| Sección | Estado | Nota |
+|---------|--------|------|
+| 2.1 Jornada base L-V/Sáb | 🟢 | Motor usa el turno: 8h netas L-V, 4h Sáb |
+| 2.2 Config por sede 2+2 | 🟢 | Cupos + alerta blanda al asignar. Falta cargar cupos (dato) |
+| 2.3 Sábado automático | 🟢 | Derivado del turno. Verificado |
+| 3.1 Opciones válidas por colaborador | 🟢 | Panel "Turno base" en el Programador |
+| 3.2 Auto-asignar sábado | 🟢 | El motor lo deriva al generar |
+| 4.1 Extras por día | 🟢 | Se registran editando el día |
+| 4.2 Máx extras quincena + alerta | 🟢 | Endpoint + alerta visual (toast) al editar |
+| 5.1 Edición diaria | 🟢 | `updateHorario` recalcula bloques desde el turno |
+| 5.1 Intercambio de turnos | 🟢 | Backend + UI (`IntercambioTurnos`) |
+| 5.2 / 8 Auditoría (registrar) | 🟢 | Se escribe en `ph_auditoria_horario` con usuario/fecha/antes/después |
+| 5.2 / 8 Auditoría (consultar) | 🟢 | `GET /horarios/auditoria/:empleado_id` + vista "Auditoría de Cambios" en el sidebar |
+| 6 Estudio (cálculo compensación) | 🟢 | Verificado vs Caso 1 y 2 de la spec |
+| 6 Estudio (mostrar compensación) | 🟢 | Icono + pill + tooltip "Estudio Xh · col. Yh / emp. Zh" en el calendario |
+| 7.1 Incapacidad general/ARL | 🟢 | "Enfermedad General" / "Incidente de Trabajo" (=ARL) |
+| 7.2 Docs obligatorios | 🟢 | Valida incapacidad + historia clínica |
+| 7.3 Notificar a 4 personas | 🟡 | DB-driven listo; **faltan cargar los 4 correos** (dato) |
+| 8 Reglas configurables | 🟢 | Tab "Parámetros" completo |
 
-| Sección | Estado | Notas |
-|---------|--------|-------|
-| 2.1 Jornada base L-V/Sáb | 🟢 | Motor `generateScheduleByShift` usa el turno: 8h netas L-V, 4h Sáb. Verificado (44h) |
-| 2.2 Config por sede 2+2 | 🟢 | Cupos en panel + alerta blanda al asignar (backend + UI). Falta (opcional) dashboard 2+2 por sede |
-| 2.3 Sábado automático | 🟢 | Derivado del turno (07-16→Sáb 07-11; 09-18→Sáb 10-14). Verificado |
-| 3.1 Opciones válidas por colaborador | 🟢 | Tab "Asignar Turnos" (frontend): selección + historial + alerta 2+2 |
-| 3.2 Auto-asignar sábado al guardar | 🟢 | El motor lo deriva al generar |
-| 4.1 Extras por día, sin masivo | 🟡 | Registro de extras al editar el día (Fase 4) |
-| 4.2 Máx extras por quincena + alerta | 🟡 | Backend ✅: `GET /horarios/extras-quincena/:id` acumula por quincena (1-15 / 16-fin) vs. param `max_extra_por_quincena` (configurable, blank=sin límite). Falta **alerta visual** en UI de edición (Fase 4) |
-| 5.1 Editar por día | 🟢 | `updateHorario` recalcula bloques según el turno del colaborador (`buildEditedDayBlocks`): base en el turno, extra después de la salida. Verificado |
-| 5.1 Intercambio de turnos | 🟡 | Backend ✅ `POST /horarios/intercambio` (recalcula + audita ambos). Falta UI |
-| 5.2 / 8 Historial auditable | 🟡 | Backend ✅: cada edición/intercambio escribe en `ph_auditoria_horario` (usuario/fecha/antes/después). Falta UI de consulta. Ojo: el front debe enviar `usuario_email`/`usuario_nombre` en el PATCH para registrar al autor |
-| 6 Estudio + compensación extras | 🟢 | El día de estudio queda CUBIERTO (se paga el turno completo). Compensa `min(horas_estudio, tope)` desde el banco; resto, empresa. Tope = param `horas_estudio_colaborador` (default 4). Verificado contra Caso 1 y Caso 2 de la spec |
-| 7.1 Incapacidad general/ARL | 🟢 | Ya distingue: `tipoIncapacidad` = "Enfermedad General" (general) / "Incidente de Trabajo" (= ARL). Valida docs por caso. Sin cambios de código |
-| 7.2 Docs obligatorios | 🟢 | `observacionesController` valida incapacidad + historia clínica |
-| 7.3 Notificar a 4 personas | 🟡 | DB-driven listo. Los 4 nombres de la spec **NO están en el código** (lo hardcodeado son 5 direcciones por rol SST, que hoy actúan como fallback). Cargar los 4 correos reales desde el panel (tipo `critica`). Nota: `ALLOWED_EMAILS` en observacionesController es lista de PERMISOS, no de notificación |
+---
 
-## Plan por fases
+## 4. 👉 QUÉ FALTA (punto de continuación)
 
-1. **Cimientos de datos** — 🟢 HECHO
-   - ✅ SQL `sql/ph_fase1_cimientos.sql` (recrea asignacion + auditoria, siembra 2 turnos)
-   - ✅ Backend asignación: `GET/POST /ph-config/asignaciones` + alerta 2+2 + helper `getJornadaBaseVigente`
-   - ✅ Frontend: tab "Asignar Turnos" (`tabs/AsignacionTurnos.jsx`) — selección de colaborador, asignación con vigencia, historial, alerta blanda 2+2 vía toast
-2. **Motor de generación** por turno fijo + sábado automático — 🟢 HECHO
-   - ✅ `generateScheduleByShift` en `schedule.js` (turno → días → bloques con descanso)
-   - ✅ `createHorario` lee turno base (`getJornadaBaseVigente`); 409 si el colaborador no tiene turno
-   - ✅ Verificado: 07-16 y 09-18 dan 8h L-V / 4h Sáb / 44h semana
-   - ⚠️ `updateHorario` (edición manual) TODAVÍA usa el modelo viejo (`getDayInfo` 07-18) → se reescribe en Fase 4
-   - ⚠️ El cálculo de semana asume servidor en UTC (Vercel lo es); en dev local hay corrimiento de día
-3. **Extras**: acumulado quincenal + alerta — 🟡 BACKEND HECHO
-   - ✅ `src/utils/quincena.js` (quincenas 1-15 / 16-fin, verificado con bisiesto)
-   - ✅ `GET /horarios/extras-quincena/:empleado_id?fecha=` (acumulado vs. `max_extra_por_quincena`)
-   - ✅ Frontend `services/horariosService.js` con `getExtrasQuincena`
-   - ⬜ Alerta visual en la UI de edición + registro de extras por día → va con Fase 4
-4. **Edición manual** + intercambio + auditoría — 🟡 BACKEND HECHO
-   - ✅ `updateHorario`: bloques por turno (`buildEditedDayBlocks`), auditoría por día, `extras_quincena` en la respuesta
-   - ✅ `POST /horarios/intercambio` (spec 5.1) — recalcula y audita ambos colaboradores
-   - ✅ `buildEditedDayBlocks` verificado (8h/10h/6h L-V, 4h/6h Sáb)
-   - ⬜ Frontend: pintar alerta visual de quincena (la respuesta ya trae `extras_quincena`), UI de intercambio, UI de consulta de auditoría; el front debe mandar `usuario_email`/`usuario_nombre`
-   - ⚠️ `updateHorario` conserva las validaciones semanales viejas (extra ≤12/sem, payable 2-3/día) y la lógica de banco del modelo anterior. La spec controla extras por QUINCENA → reconciliar (junto con banco) en una pasada con Fase 5
-5. **Estudio** (política 4h/4h) + **Incapacidad** (ARL + 4 correos) — 🟢 BACKEND HECHO
-   - ✅ Motor: día de estudio cubierto + metadatos (`horas_estudio`, `estudio_compensa_banco`, `estudio_cubre_empresa`). Verificado vs Caso 1 y 2
-   - ✅ `createHorario` debita del banco hasta lo disponible; devuelve `compensacion_estudio`
-   - ✅ Param `horas_estudio_colaborador` (default 4) en `buildScheduleConfig`
-   - ✅ Incapacidad ARL ya distinguida; solo faltan los 4 correos (dato)
-   - ⚠️ SUPUESTOS a validar al probar: (a) el día se paga completo; (b) la bolsa es el banco `horas_compensacion`. Si el cliente quiere otra cosa, es ajuste acotado
+### Frontend (código) — en orden recomendado
+1. ~~**Vista de auditoría (5.2/8)**~~ ✅ HECHO (2026-06-16)
+   - Backend: `getAuditoria` + ruta `GET /horarios/auditoria/:empleado_id?horario_id=&limit=` (lee `ph_auditoria_horario`, orden `fecha_cambio.desc`; `empleado_id=todos` trae todo).
+   - Frontend: `AuditoriaHorarios.jsx` + `.css`, vista "Auditoría de Cambios" en el sidebar; `horariosService.getAuditoria`. Tabla con fecha, colaborador, día, tipo, antes → después, autor.
+2. ~~**Mostrar compensación de estudio (6.2)**~~ ✅ HECHO (2026-06-16)
+   - `ProgramadorHorarios.jsx`: los metadatos `horas_estudio`/`estudio_compensa_banco`/`estudio_cubre_empresa` se pasan a `extendedProps` (rama de día regular, el día de estudio se paga completo → cae ahí) y se pintan en `eventContentRenderer`: icono `FaGraduationCap`, pill "Estudio Xh · col. Yh / emp. Zh", línea de tooltip y clase `ph-study-day`. CSS en `ProgramadorHorarios.css` (`.ph-study-pill`, `.study-comp-icon`, `.ph-study-day`).
+3. ~~**Limpieza UI**~~ ✅ HECHO (2026-06-16)
+   - Eliminado el selector de "día reducido" y "tipo de jornada reducida" de `WeekHistory.jsx` + props huérfanas (`reducedDay`/`reducedDayType`/`onReducedDay*`) en `WeekHistoryWrapper.jsx` y el estado/setters en `useScheduleEditing.js`. Se conservó la rama `else` del preview de edición (defaults 10/7) — eso es tech-debt aparte (reconciliar a quincena).
 
-## Supuestos abiertos (validar al probar)
+### Tech debt (cuando haya tiempo)
+- **`updateHorario`**: ✅ (2026-06-16) quitado el **bloqueo semanal de extras** (los `return 400` por tope extra/semana y por "legal incompleta"). Ahora los extras se controlan por **quincena** con alerta visual (spec 4.2), no se bloquea el guardado. Se conservan los topes **diarios** legales (8h L-V / 4h Sáb + máximo diario). **PENDIENTE**: el **banco de horas** (`createOrUpdateExcess`/`resetForSemana`, sección 8) sigue con el modelo de exceso semanal → reconciliar a quincena es un cambio mayor aparte (entrelazado con la compensación de estudio que debita del banco; hacer con smoke test).
+- ~~**`ALLOWED_EMAILS`** en `observacionesController`~~ ✅ HECHO (2026-06-16): removido el gmail personal hardcodeado; lista de GH ahora extensible por env `HR_ALLOWED_EMAILS` (CSV) con fallback a los 5 correos corporativos.
 
-- **Compensación de estudio**: día cubierto (pago completo) + débito del banco `horas_compensacion` hasta `min(horas_estudio, tope)`. Confirmado el cálculo; falta validar representación con negocio.
-- **Banco vs quincena en edición**: `updateHorario` aún valida extras por semana (≤12) y mantiene el banco viejo. La spec controla por quincena → reconciliar.
+### Datos (los carga el usuario en Supabase/panel)
+> 📋 Guía paso a paso con SQL listo para correr: **`docs/PROGRAMADOR-HORARIOS-PUESTA-EN-MARCHA.md`**
+- [ ] Cupos 2+2 por sede → panel "Sedes y Cupos".
+- [ ] Asignar turno base a cada colaborador → Programador (requerido para generar; si falta, 409).
+- [ ] Cargar los 4 correos de incapacidad (Valentina Flórez, Laura Obando, Laura Melisa Caro, Laura Ariza) → panel "Destinatarios" (tipo `critica`).
+- [x] SQL `sql/ph_fase1_cimientos.sql` — ya corrió (tablas + 2 turnos sembrados).
+- [x] Params legales sembrados (limite_legal_semanal=44, etc.).
 
-## Tareas de datos pendientes (las hace el usuario en Supabase/panel)
+### Deploy / infra
+- [ ] **Commitear la rama `Johan` (frontend) y desplegar** cuando se quiera poner en producción para los usuarios reales. Hoy el frontend de merkahorro.com es el VIEJO (incompatible con el backend nuevo).
+- [ ] **Correo (Outlook 535)**: las credenciales SMTP fallan en Vercel (`EMAIL_USER`/`EMAIL_PASS`). Opciones: arreglar credenciales / habilitar SMTP autenticado / **migrar a Resend o Brevo** (recomendado, más robusto). NO es código.
+- [ ] **Pausa de correos en pruebas**: poner `EMAIL_ENABLED=false` en Vercel (+ redeploy) pausa TODO el envío. Quitar cuando se quiera reactivar.
 
-- [ ] Correr `sql/ph_fase1_cimientos.sql` (una sola vez)
-- [ ] Configurar cupos 2+2 por sede desde el panel "Sedes y Cupos"
-- [ ] Asignar turno base a cada colaborador — **requerido para generar** (si falta, el motor responde 409). Vía `POST /ph-config/asignaciones` o la futura UI
-- [ ] Cargar los 4 correos de incapacidad (tipo `critica`) — desde el panel, cuando se tengan
-- [x] ~~Definir máximo de extras por quincena~~ → queda **configurable por el admin** (param `max_extra_por_quincena`), en blanco por defecto; la alerta no dispara hasta que lo cargue
+---
 
-## Arquitectura de UI (reorganización)
+## 5. Cómo se prueba (setup actual)
 
-Mental model en 3 momentos, sin redundancia:
-- **Configuración** (se toca poco): Jornadas, Parámetros, Sedes y Cupos, Destinatarios.
-- **Por empleado**: el turno base se asigna **dentro del Programador** (`TurnoBaseEmpleado`), al seleccionar el colaborador. Un solo lugar, un solo buscador.
-- **Operación diaria** (Programador): elegir empleado → ver/ajustar turno base → generar (sin elegir jornada ni días: vienen del turno) → editar/intercambiar.
+- Backend: desplegado en Vercel. **Cada cambio de backend requiere redeploy** para verlo.
+- Frontend: local con `npm run dev`. Usa el `.env` que apunta a Vercel (NO hay `.env.local`).
+- Para iterar backend más rápido sin redeploy: correr `npm start` local (puerto 3000) y crear `.env.local` en el front con `VITE_BACKEND_HORARIOS_URL=http://localhost:3000`.
+- ⚠️ El cálculo de semana asume servidor en **UTC** (Vercel lo es). En dev local (UTC-5) hay un corrimiento de día en las pruebas del motor; usar `TZ=UTC` para reproducir producción.
 
-Cambios hechos:
-- ✅ Tab "Asignar Turnos" de Configuración → **eliminado**; integrado en Programador vía `TurnoBaseEmpleado.jsx`.
-- ✅ `ScheduleCreator` → se le quitó el dropdown de jornada y el selector de días (redundantes; el turno base manda).
-- ✅ `useScheduleManagement` → ya no exige `jornadaId` ni envía `jornada_id`.
-- ✅ Tab "Jornadas" → arreglado el mapeo `dias_laborales` ↔ `dias_aplica` (enteros ISO). Crear/editar/mostrar OK.
-- ✅ Eliminado `tabs/AsignacionTurnos.jsx` (código muerto).
+---
 
-## Deuda técnica / issues conocidos
+## 6. Archivos clave
 
-- **`updateHorario`**: bloques ya por turno (Fase 4 ✅), pero conserva las validaciones semanales viejas (extra ≤12/sem) + banco del modelo anterior. La spec controla por quincena → reconciliar.
-- **`ALLOWED_EMAILS`** en `observacionesController` (permisos): lista hardcodeada con un gmail personal. Tema de permisos, no de notificación. Limpiar aparte.
-- **Frontend — hecho en pasada de bugs/edición**:
-  - ✅ Crashes `toast.info`/`toast.warning` (no existen en react-hot-toast) corregidos en `useScheduleManagement`, `useScheduleAndBlockingData`, `ObservacionesPH`.
-  - ✅ `useScheduleEditing` reescrito: ya NO recalcula al modelo viejo (corrupción 10/7 que metía extras fantasma). Ahora solo envía las horas de cada día (preserva las existentes) + `usuario_email`/`usuario_nombre` (auditoría) y muestra la alerta de quincena (`extras_quincena`) por toast.
-- **Frontend pendiente**: UI de intercambio de turnos (backend `POST /horarios/intercambio` listo), vista de consulta de auditoría, mostrar compensación de estudio (4h/4h) en el calendario. Limpiar el selector de "día reducido" de `WeekHistory` (quedó inerte).
-- **Config Vercel (no es código)**: el envío de correo falla con `535 auth` → credenciales SMTP de Outlook (`EMAIL_USER`/`EMAIL_PASS`) mal o vencidas en las env vars de Vercel. El horario se crea igual; solo el correo no sale.
+### Backend (`backendHorarios`)
+- `src/utils/schedule.js` — motor: `generateScheduleByShift` (generación por turno), `buildEditedDayBlocks` (edición), compensación de estudio.
+- `src/utils/quincena.js` — cálculo de quincenas (1-15 / 16-fin).
+- `src/controllers/horariosController.js` — crear/editar/intercambiar horario, extras-quincena, auditoría (`writeAuditEntries`), banco.
+- `src/controllers/phConfigController.js` — jornadas, parámetros (upsert masivo), sedes/cupos, asignación de turno (`getJornadaBaseVigente`), destinatarios.
+- `src/services/phConfigService.js` — `buildScheduleConfig` (lee reglas de la DB con fallback).
+- `src/services/emailService.js` — envío + kill-switch `EMAIL_ENABLED`.
+- `src/config/notificationDefaults.js` — fallback de destinatarios.
+- `sql/ph_fase1_cimientos.sql` — migración (tablas + 2 turnos).
 
-## Archivos clave
+### Frontend (`Pagina-web_React`, rama `Johan`)
+- `src/pages/Programador_horarios/ProgramadorHorarios.jsx` — pantalla principal (empleado → turno base → intercambio → generar → editar).
+- `src/pages/Programador_horarios/components/TurnoBaseEmpleado.jsx` — asignar/cambiar turno base.
+- `src/pages/Programador_horarios/components/IntercambioTurnos.jsx` — intercambio de turnos.
+- `src/pages/Programador_horarios/components/ScheduleCreator.jsx` — generar (solo rango de fechas).
+- `src/pages/Programador_horarios/hooks/useScheduleManagement.js` — crear horario.
+- `src/pages/Programador_horarios/hooks/useScheduleEditing.js` — editar (envía horas + usuario, muestra alerta quincena).
+- `src/pages/Programador_horarios/components/Configuracion/` — tabs Jornadas, Parámetros, SedesCupos, Destinatarios.
+- `src/services/phConfigService.js` — API de config (jornadas, parámetros, sedes, asignaciones, destinatarios).
+- `src/services/horariosService.js` — `getExtrasQuincena`, `intercambiarTurnos`.
 
-- `src/utils/schedule.js` — motor de generación (a reescribir en Fase 2)
-- `src/controllers/horariosController.js` — crear/editar horario, banco de horas
-- `src/controllers/phConfigController.js` — config: jornadas, parámetros, sedes, asignación, destinatarios
-- `src/services/phConfigService.js` — lee config de negocio (`buildScheduleConfig`)
-- `src/config/notificationDefaults.js` — fallback de destinatarios y constantes
-- `sql/ph_fase1_cimientos.sql` — migración Fase 1
-- Frontend (repo `Pagina-web_React`): `src/pages/Programador_horarios/components/Configuracion/tabs/AsignacionTurnos.jsx` — tab de asignación; `services/phConfigService.js` — métodos `getAsignaciones`/`asignarJornada`
+### Endpoints backend principales
+- `POST /api/horarios` — generar (lee turno base; 409 si no tiene).
+- `PATCH /api/horarios/:id` — editar (audita; devuelve `extras_quincena`).
+- `POST /api/horarios/intercambio` — intercambio de turnos.
+- `GET /api/horarios/extras-quincena/:empleado_id?fecha=` — acumulado de extras por quincena.
+- `GET/POST /api/ph-config/asignaciones` — turno base por colaborador.
+- `GET/PUT /api/ph-config/parametros|sedes|destinatarios` + `jornadas` — configuración.

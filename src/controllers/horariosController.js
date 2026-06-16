@@ -431,6 +431,31 @@ const writeAuditEntries = async ({
   }
 };
 
+// GET /horarios/auditoria/:empleado_id?horario_id=&limit=  (spec 5.2 / 8)
+// Consulta el historial de cambios auditados (quién, cuándo, antes → después).
+export const getAuditoria = async (req, res) => {
+  const { empleado_id } = req.params;
+  const { horario_id } = req.query;
+  const limit = Math.min(Number(req.query.limit) || 200, 1000);
+  try {
+    let url = `/ph_auditoria_horario?select=*`;
+    if (empleado_id && empleado_id !== "todos") {
+      url += `&empleado_id=eq.${empleado_id}`;
+    }
+    if (horario_id) url += `&horario_id=eq.${horario_id}`;
+    url += `&order=fecha_cambio.desc&limit=${limit}`;
+
+    const { data, error } = await supabaseAxios.get(url);
+    if (error) throw error;
+    res.json(Array.isArray(data) ? data : []);
+  } catch (e) {
+    console.error("Error consultando auditoría:", e?.message || e);
+    res
+      .status(500)
+      .json({ message: "Error consultando auditoría", error: e?.message });
+  }
+};
+
 // GET /horarios/extras-quincena/:empleado_id?fecha=YYYY-MM-DD  (spec 4.2)
 export const getExtrasQuincena = async (req, res) => {
   const { empleado_id } = req.params;
@@ -827,8 +852,6 @@ export const updateHorario = async (req, res) => {
     let legalSum = 0,
       payableExtraSum = 0,
       totalSum = 0;
-    let legalCapacitySum = 0,
-      extraCapacitySum = 0;
     let manualOvertimeDelta = 0,
       manualOvertimeTotal = 0;
     const manualOvertimeDetails = [];
@@ -880,11 +903,6 @@ export const updateHorario = async (req, res) => {
       const base = Math.min(totalHours, legalCapForDay);
       const extra = Math.max(0, totalHours - base);
       const payableExtra = Math.min(extra, payableExtraCap);
-
-      if (totalHours > 0 && legalCapForDay > 0) {
-        legalCapacitySum = toFixedNumber(legalCapacitySum + legalCapForDay);
-        extraCapacitySum = toFixedNumber(extraCapacitySum + payableExtraCap);
-      }
 
       legalSum = toFixedNumber(legalSum + base);
       payableExtraSum = toFixedNumber(payableExtraSum + payableExtra);
@@ -939,21 +957,14 @@ export const updateHorario = async (req, res) => {
       updatedDiasRecalculated.push(day);
     }
 
-    // 6. Validaciones semanales
-    const legalLimit = Math.min(weeklyLegalLimit, legalCapacitySum);
-    const extraLimit = Math.min(weeklyExtraLimit, extraCapacitySum);
-
-    if (payableExtraSum - extraLimit > 1e-6) {
-      return res.status(400).json({
-        message: `Límite semanal de extras pagables (${extraLimit}h) excedido. Horas extra calculadas: ${payableExtraSum}h.`,
-      });
-    }
-    if (payableExtraSum > 0 && legalSum + 1e-6 < legalLimit) {
-      return res.status(400).json({
-        message:
-          "No puedes tener horas extra si no se cumplen las horas legales de la semana.",
-      });
-    }
+    // 6. Control de extras: la spec (4.2) los controla por QUINCENA con ALERTA
+    //    VISUAL, no por bloqueo semanal. El aviso de quincena se calcula en la
+    //    sección 9 y la UI muestra el toast. Por eso acá NO se bloquea el guardado
+    //    por tope semanal de extras (modelo viejo). Lo que SÍ se mantiene son los
+    //    topes DIARIOS legales (jornada 8h L-V / 4h Sáb + máximo diario), validados
+    //    por día en el bucle anterior (getLegalCapForDay / overtimeLimit).
+    //    NOTA tech-debt: el banco de horas (sección 8) sigue con el modelo de
+    //    exceso semanal; reconciliarlo a quincena es un cambio aparte mayor.
 
     // 7. Preparar payload final y actualizar horario
     const updatePayload = {
