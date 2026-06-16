@@ -225,6 +225,81 @@ export const listSedesConCupos = async (_req, res) => {
   }
 };
 
+// ⚠️ ABM de sedes — opera sobre la tabla COMPARTIDA `sedes` (la usa toda la
+// empresa, no solo el PH). Crear/eliminar impacta otros módulos. Se protege:
+// no se elimina una sede con colaboradores; si otra tabla la referencia, la BD
+// rechaza con error de FK (lo devolvemos como 409 legible).
+
+export const createSede = async (req, res) => {
+  const { nombre } = req.body;
+  if (!nombre || !nombre.trim()) {
+    return res.status(400).json({ message: "El nombre de la sede es requerido." });
+  }
+  try {
+    const { data, error } = await supabaseAxios.post(
+      `/sedes`,
+      [{ nombre: nombre.trim() }],
+      REPRESENTATION
+    );
+    if (error) throw error;
+    res.status(201).json(data?.[0] || { nombre: nombre.trim() });
+  } catch (e) {
+    handleError(res, e, "Error creando la sede");
+  }
+};
+
+export const renameSede = async (req, res) => {
+  const { id } = req.params;
+  const { nombre } = req.body;
+  if (!nombre || !nombre.trim()) {
+    return res.status(400).json({ message: "El nombre de la sede es requerido." });
+  }
+  try {
+    const { error } = await supabaseAxios.patch(`/sedes?id=eq.${id}`, {
+      nombre: nombre.trim(),
+    });
+    if (error) throw error;
+    res.json({ message: "Sede actualizada.", id, nombre: nombre.trim() });
+  } catch (e) {
+    handleError(res, e, "Error renombrando la sede");
+  }
+};
+
+export const deleteSede = async (req, res) => {
+  const { id } = req.params;
+  try {
+    // Protección 1: no eliminar una sede con colaboradores asignados.
+    const { data: emps } = await supabaseAxios.get(
+      `/empleados?select=id&sede_id=eq.${id}&limit=1`
+    );
+    if (Array.isArray(emps) && emps.length > 0) {
+      return res.status(409).json({
+        message:
+          "No se puede eliminar la sede porque tiene colaboradores asignados. Reasignalos a otra sede primero.",
+      });
+    }
+    // Limpiar config del módulo dependiente de la sede (cupos + visibilidad).
+    await supabaseAxios.delete(`/ph_sede_config?sede_id=eq.${id}`);
+    try {
+      await supabaseAxios.delete(`/ph_sede_visibilidad?sede_id=eq.${id}`);
+    } catch (_) {
+      /* tabla opcional */
+    }
+    const { error } = await supabaseAxios.delete(`/sedes?id=eq.${id}`);
+    if (error) throw error;
+    res.json({ message: "Sede eliminada." });
+  } catch (e) {
+    // Protección 2: otra parte del sistema referencia la sede (FK restrict).
+    if (e?.response?.data?.code === "23503") {
+      return res.status(409).json({
+        message:
+          "No se puede eliminar la sede porque otra parte del sistema la está usando.",
+      });
+    }
+    handleError(res, e, "Error eliminando la sede");
+  }
+};
+
 // Marca una sede como visible/oculta en el Programador. NO toca la tabla
 // compartida `sedes`: usa la tabla propia `ph_sede_visibilidad`.
 export const setSedeVisibilidad = async (req, res) => {

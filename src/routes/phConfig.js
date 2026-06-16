@@ -22,6 +22,11 @@ router.patch("/jornadas/:id", ctrl.updateJornada);
 router.delete("/jornadas/:id", ctrl.deleteJornada);
 
 // Configuración por sede (cupos)
+// ABM de sedes (tabla compartida `sedes`)
+router.post("/sedes", ctrl.createSede);
+router.patch("/sedes/:id", ctrl.renameSede);
+router.delete("/sedes/:id", ctrl.deleteSede);
+
 // Lista todas las sedes con sus cupos agregados ({ [jornada_id]: cupos }).
 router.get("/sedes", ctrl.listSedesConCupos);
 // Guarda todos los cupos de una sede de una sola vez.
