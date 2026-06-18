@@ -105,3 +105,54 @@ describe("Compensación de estudio (spec 6.2)", () => {
     expect(totalSemana).toBe(44);
   });
 });
+
+describe("Estudio de día completo — modos libre / redistribuir", () => {
+  const VIERNES = "2024-01-12";
+
+  const generarSemana = (obs) =>
+    generateScheduleByShift(LUNES, SABADO, TURNO, new Map(), {}, {}, obs, null)
+      .schedule;
+
+  it("modo 'libre': el día no se trabaja (0h) y no se recupera", () => {
+    const obs = [
+      {
+        start: VIERNES,
+        end: VIERNES,
+        details: { modo: "libre", dias_estudio: [{ fecha: VIERNES }] },
+      },
+    ];
+    const schedule = generarSemana(obs);
+    const dias = schedule.flatMap((w) => w.dias);
+    const viernes = dias.find((d) => d.fecha === VIERNES);
+
+    expect(viernes.horas).toBe(0);
+    expect(viernes.es_estudio).toBe(true);
+    expect(viernes.estudio_modo).toBe("libre");
+    // L-J (8×4=32) + Sáb 4 = 36; el viernes queda en 0.
+    expect(schedule[0].total_horas_semana).toBe(36);
+  });
+
+  it("modo 'redistribuir': las horas del día se reparten sobre los días trabajados", () => {
+    // Sábado (4h) repartido sobre L-V (5 días) → +0.8h c/u, sábado en 0.
+    const obs = [
+      {
+        start: SABADO,
+        end: SABADO,
+        details: { modo: "redistribuir", dias_estudio: [{ fecha: SABADO }] },
+      },
+    ];
+    const schedule = generarSemana(obs);
+    const dias = schedule.flatMap((w) => w.dias);
+
+    const sabado = dias.find((d) => d.fecha === SABADO);
+    expect(sabado.horas).toBe(0);
+    expect(sabado.estudio_modo).toBe("redistribuir");
+
+    const lunes = dias.find((d) => d.fecha === LUNES);
+    expect(lunes.horas).toBeCloseTo(8.8, 2);
+    expect(lunes.horas_extra).toBeCloseTo(0.8, 2);
+
+    // El total semanal se conserva (las 4h se mueven, no se pierden).
+    expect(schedule[0].total_horas_semana).toBeCloseTo(44, 2);
+  });
+});

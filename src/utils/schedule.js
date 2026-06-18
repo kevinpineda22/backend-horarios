@@ -650,6 +650,43 @@ function collectStudyRanges(partialObservations, ymd, wd) {
   return ranges;
 }
 
+// Rangos de PERMISO POR HORAS que afectan un día (para restarlos del turno).
+// A diferencia del estudio, estas horas NO se pagan: son una ausencia parcial.
+// El permiso viaja en details.horas_permiso = [{ fecha, inicio, fin }].
+function collectPermisoRanges(partialObservations, ymd, wd) {
+  const ranges = [];
+  for (const obs of partialObservations || []) {
+    if (!(ymd >= obs.start && ymd <= obs.end)) continue;
+    const list = obs.details?.horas_permiso;
+    if (!Array.isArray(list)) continue;
+    const dayConfig =
+      list.find((x) => x.fecha === ymd) || list.find((x) => x.dia === wd);
+    if (dayConfig?.inicio && dayConfig?.fin) {
+      const s = hmToMinutes(dayConfig.inicio);
+      const e = hmToMinutes(dayConfig.fin);
+      if (e > s) ranges.push({ start: s, end: e });
+    }
+  }
+  return ranges;
+}
+
+// Modo de estudio que aplica a un día, de la primera novedad que lo cubre:
+//   "libre"        → ese día no se trabaja (no se recupera).
+//   "redistribuir" → ese día no se trabaja; sus horas se reparten en los días
+//                    laborales de la semana.
+//   null           → estudio parcial / sin modo → compensación 6.2 (legacy).
+function studyModeForDay(partialObservations, ymd, wd) {
+  for (const obs of partialObservations || []) {
+    if (!(ymd >= obs.start && ymd <= obs.end)) continue;
+    const list = obs.details?.dias_estudio;
+    if (!Array.isArray(list)) continue;
+    const match =
+      list.find((x) => x.fecha === ymd) || list.find((x) => x.dia === wd);
+    if (match) return obs.details?.modo || null;
+  }
+  return null;
+}
+
 export function generateScheduleByShift(
   fechaInicio,
   fechaFin,
@@ -688,6 +725,7 @@ export function generateScheduleByShift(
     const weekStart = new Date(cursor);
     const weekEnd = addDays(weekStart, 6);
     const dias = [];
+    let horasARedistribuir = 0; // estudio modo "redistribuir": horas a repartir
 
     for (let i = 0; i < 7; i++) {
       const d = addDays(weekStart, i);
@@ -744,6 +782,30 @@ export function generateScheduleByShift(
         salidaDia,
         !isSaturday // sábado sin descanso
       );
+
+      // Estudio de día completo (modos nuevos).
+      const studyMode = studyModeForDay(partialObservations, ymd, wd);
+      if (studyMode === "libre") {
+        // No se trabaja ese día y no se recupera.
+        dias.push(emptyDay(ymd, wd, { es_estudio: true, estudio_modo: "libre" }));
+        continue;
+      }
+      if (studyMode === "redistribuir") {
+        // No se trabaja ese día; sus horas se reparten luego sobre los días
+        // laborales de la semana.
+        const horasDelDia = Math.min(full.netHours, getLegalCapForDay(wd, cfg));
+        horasARedistribuir =
+          Math.round((horasARedistribuir + horasDelDia) * 100) / 100;
+        dias.push(
+          emptyDay(ymd, wd, {
+            es_estudio: true,
+            estudio_modo: "redistribuir",
+            horas_origen: horasDelDia,
+          })
+        );
+        continue;
+      }
+
       let segments = full.segments;
 
       // Estudio (parcial, spec 6.2): se quitan los rangos de estudio de la
@@ -751,14 +813,34 @@ export function generateScheduleByShift(
       let horasEstudio = 0;
       const studyRanges = collectStudyRanges(partialObservations, ymd, wd);
       if (studyRanges.length) {
-        segments = subtractTimeRanges(full.segments, studyRanges);
+        segments = subtractTimeRanges(segments, studyRanges);
         const presentNet =
           segments.reduce((s, seg) => s + (seg.to - seg.from), 0) / 60;
         horasEstudio = Math.round((full.netHours - presentNet) * 100) / 100;
       }
 
-      // Tope legal del día (8 L-V / 4 Sáb). El día se paga completo (cubierto).
-      const horasBase = Math.min(full.netHours, getLegalCapForDay(wd, cfg));
+      // Permiso por horas: se quitan los rangos marcados de la presencia y esas
+      // horas NO se pagan (a diferencia del estudio). El día paga menos.
+      let horasPermiso = 0;
+      const permisoRanges = collectPermisoRanges(partialObservations, ymd, wd);
+      if (permisoRanges.length) {
+        const netAntes =
+          segments.reduce((s, seg) => s + (seg.to - seg.from), 0) / 60;
+        segments = subtractTimeRanges(segments, permisoRanges);
+        const netDespues =
+          segments.reduce((s, seg) => s + (seg.to - seg.from), 0) / 60;
+        horasPermiso = Math.round((netAntes - netDespues) * 100) / 100;
+      }
+
+      // Base pagada: tope legal del día (8 L-V / 4 Sáb) menos las horas de
+      // permiso (que NO se pagan). El estudio no descuenta (se compensa).
+      const horasBase = Math.max(
+        0,
+        Math.round(
+          (Math.min(full.netHours, getLegalCapForDay(wd, cfg)) - horasPermiso) *
+            100
+        ) / 100
+      );
 
       // Compensación: el colaborador cubre hasta `tope` desde sus extras; resto, empresa.
       let extraMeta = {};
@@ -772,7 +854,42 @@ export function generateScheduleByShift(
             Math.round((horasEstudio - compensaBanco) * 100) / 100,
         };
       }
+      if (horasPermiso > 0) {
+        extraMeta = { ...extraMeta, horas_permiso: horasPermiso };
+      }
       dias.push(buildDay(ymd, wd, segments, horasBase, extraMeta));
+    }
+
+    // Estudio modo "redistribuir": repartir uniformemente las horas del/los
+    // día(s) de estudio sobre los días efectivamente trabajados de la semana.
+    // Pueden superar la jornada legal diaria → el excedente cuenta como extra.
+    // Queda editable luego con la edición por día.
+    if (horasARedistribuir > 0) {
+      const trabajados = dias.filter(
+        (d) => !d.es_estudio && Number(d.horas) > 0
+      );
+      if (trabajados.length > 0) {
+        const porDia = horasARedistribuir / trabajados.length;
+        for (const d of trabajados) {
+          const wdd = isoWeekday(parseISO(d.fecha + "T00:00:00Z"));
+          const nuevoTotal = Math.round((Number(d.horas) + porDia) * 100) / 100;
+          const cap = getLegalCapForDay(wdd, cfg);
+          const { bloques, entrada, salida } = buildEditedDayBlocks(
+            d.fecha,
+            turno,
+            wdd,
+            nuevoTotal
+          );
+          d.horas = nuevoTotal;
+          d.horas_base = Math.min(nuevoTotal, cap);
+          d.horas_extra = Math.round((nuevoTotal - d.horas_base) * 100) / 100;
+          d.bloques = bloques;
+          d.jornada_entrada = entrada;
+          d.jornada_salida = salida;
+          d.horas_redistribuidas =
+            Math.round(((d.horas_redistribuidas || 0) + porDia) * 100) / 100;
+        }
+      }
     }
 
     outWeeks.push({

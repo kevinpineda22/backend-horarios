@@ -62,6 +62,15 @@
 | **Caso 1** (Luisa Córdoba) | Estudio sábado completo (4 h) | Descuenta **4 h** de las horas extra del colaborador. Empresa: 0 h. Día cubierto. |
 | **Caso 2** (David Ávalo) | Estudio lunes completo (8 h) | Colaborador cubre **4 h** (su tope) con extras; empresa cubre las otras **4 h**. Si hay más extras, no se afectan. |
 
+**Modos de estudio (configurables por novedad) y recurrencia:**
+Al registrar un estudio se elige cómo se maneja el día, y se puede programar **recurrente** (ej: "todos los viernes de este mes"):
+
+| Modo | Qué hace |
+|---|---|
+| **Parcial** | Solo algunas horas del día; el día se paga completo y se descuenta de las horas extra (Casos 1 y 2). |
+| **Día libre** | Ese día **no se trabaja** ni se recupera (ej: estudia todos los viernes todo el día → el viernes queda libre). |
+| **Redistribuir** | Ese día no se trabaja y sus horas se **reparten sobre los demás días** trabajados de la semana (ej: estudia los sábados → las 4 h pasan a la semana). Totalmente editable. |
+
 ---
 
 ## 6. Módulo de Novedades por Incapacidad

@@ -235,6 +235,31 @@ export const uploadEmpleados = async (req, res) => {
 };
 
 /**
+ * Endpoint para cambiar la sede de un empleado.
+ * Acepta sede_id como UUID o como nombre (lo resuelve igual que en el alta).
+ */
+export const updateEmpleadoSede = async (req, res) => {
+  const { id } = req.params;
+  const { sede_id } = req.body;
+  if (!sede_id) {
+    return res.status(400).json({ message: 'sede_id es requerido.' });
+  }
+  try {
+    const sedeUuid = await findOrCreateId('sedes', sede_id);
+    const { error } = await supabaseAxios.patch(`/empleados?id=eq.${id}`, {
+      sede_id: sedeUuid,
+    });
+    if (error) throw error;
+    res.json({ message: 'Sede del empleado actualizada.', id, sede_id: sedeUuid });
+  } catch (e) {
+    console.error(e);
+    res
+      .status(500)
+      .json({ message: 'Error al cambiar la sede del empleado', error: e.message });
+  }
+};
+
+/**
  * Endpoint para actualizar el estado de un empleado (activar/desactivar).
  */
 export const toggleEmpleadoStatus = async (req, res) => {

@@ -1,6 +1,6 @@
 // src/routes/empleadosRoutes.js
 import express from 'express';
-import { getEmpleados, createEmpleado, uploadEmpleados, toggleEmpleadoStatus } from '../controllers/empleadosController.js';
+import { getEmpleados, createEmpleado, uploadEmpleados, toggleEmpleadoStatus, updateEmpleadoSede } from '../controllers/empleadosController.js';
 import multer from 'multer';
 
 const router = express.Router();
@@ -17,6 +17,10 @@ router.post('/', createEmpleado);
 // Ruta para la carga masiva de empleados
 // POST /api/empleados/upload
 router.post('/upload', upload.single('file'), uploadEmpleados);
+
+// Ruta para cambiar la sede de un empleado
+// PATCH /api/empleados/:id/sede
+router.patch('/:id/sede', updateEmpleadoSede);
 
 // Ruta para actualizar el estado de un empleado
 // PATCH /api/empleados/:id

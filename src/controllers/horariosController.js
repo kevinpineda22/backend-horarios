@@ -46,6 +46,19 @@ const BLOCKING_NOVEDADES = new Set([
   "Día de la Familia",
 ]);
 
+// ¿La novedad es un bloqueo PARCIAL (resta horas del día) en vez de un bloqueo
+// de día completo? Lo son el Estudio con días de estudio y el Permiso por horas.
+// Estas se pasan al motor como `partialObservations` y NO frenan la generación.
+const isPartialObservation = (obs) =>
+  Boolean(
+    (obs?.tipo === "Estudio" &&
+      Array.isArray(obs?.details?.dias_estudio) &&
+      obs.details.dias_estudio.length > 0) ||
+      (obs?.tipo === "Permisos" &&
+        Array.isArray(obs?.details?.horas_permiso) &&
+        obs.details.horas_permiso.length > 0)
+  );
+
 const parseDateOnly = (value) => {
   if (!value) return null;
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
@@ -353,17 +366,9 @@ export const createHorario = async (req, res) => {
       scheduleEnd
     );
 
-    const realBlockers = blockingObservations.filter((obs) => {
-      if (
-        obs.tipo === "Estudio" &&
-        obs.details &&
-        obs.details.dias_estudio &&
-        obs.details.dias_estudio.length > 0
-      ) {
-        return false;
-      }
-      return true;
-    });
+    const realBlockers = blockingObservations.filter(
+      (obs) => !isPartialObservation(obs)
+    );
 
     if (realBlockers.length) {
       return res.status(409).json({
@@ -372,14 +377,9 @@ export const createHorario = async (req, res) => {
       });
     }
 
-    const partialObservations = blockingObservations.filter((obs) => {
-      return (
-        obs.tipo === "Estudio" &&
-        obs.details &&
-        obs.details.dias_estudio &&
-        obs.details.dias_estudio.length > 0
-      );
-    });
+    const partialObservations = blockingObservations.filter(
+      isPartialObservation
+    );
 
     const holidaySet = getHolidaySet(fecha_inicio, fecha_fin);
     const cfg = await loadScheduleConfigSafe();
@@ -604,9 +604,10 @@ export const updateHorario = async (req, res) => {
     );
 
     if (blockingObservations.length) {
-      // FILTRO: Ignorar bloqueos de tipo "Estudio" ya que son parciales y permiten horas
+      // Ignorar bloqueos PARCIALES (estudio con días / permiso por horas):
+      // restan horas pero no impiden asignar el resto del día.
       const realBlockers = blockingObservations.filter(
-        (obs) => obs.tipo !== "Estudio"
+        (obs) => !isPartialObservation(obs)
       );
 
       const conflicts = [];
