@@ -106,6 +106,48 @@ separar el render masivo (tablas, modales, tarjetas) de la lógica de estado.
 
 ---
 
+## 🩹 REFINAMIENTO UX (post-feedback del usuario, 2026-06-22)
+
+Tras probar la asignación masiva, el usuario reportó dos cosas. Ambas atendidas:
+
+### Bug: la generación creaba un solo día
+- **Causa:** el rango por defecto de los modales era `hoy()–hoy()` (1 día). Si no se
+  abría el rango a mano, generaba solo hoy. El backend estaba bien.
+- **Fix:** los modales (`AsignacionMasivaModal.jsx` y el "Programar" individual en
+  `VistaPorSede.jsx`) ahora arrancan con la **semana actual (lun–sáb)** vía
+  `semanaActual()` (formateo en hora LOCAL, evita corrimiento por UTC). El modal
+  masivo además muestra cuántos días cubre el rango y avisa si queda en 1 solo día.
+
+### Consolidación: una sola puerta para generar
+- El usuario tenía 3 formas de generar un horario → confuso. Decisión: **Vista por
+  Sede pasa a ser el ÚNICO hub de generación** (individual + masiva).
+- `ProgramadorHorarios.jsx` (tab) **deja de generar**: se le quitó el widget
+  `ScheduleCreator` y queda como **consulta/edición** del horario de un colaborador
+  (calendario visual + edición semana-por-semana + turno base + intercambio, que no
+  existen en otro lado). En su lugar hay una guía hacia "Programar Horarios".
+- **Renombrado de tabs** (`AdminProgramadorHorarios.jsx`): "Vista por Sede" →
+  **"Programar Horarios"** (ahora primero y landing por defecto); "Programador de
+  Horarios" → **"Horario por Colaborador"**.
+- **Huérfanos tras el cambio** (no borrados, a confirmar): `components/ScheduleCreator.jsx`
+  y `hooks/useScheduleManagement.js`.
+
+### Tarjeta de sede = "tablero de estado" (claridad)
+Feedback: "no sé quién ya tiene horario y quién no, ni dónde ver el que asigné".
+La tarjeta de cada colaborador en la Vista por Sede pasó de panel de control a
+**tablero de estado**:
+- **Badge de estado** por persona para la **semana actual**: ✓ "Horario listo" (verde)
+  / ⚠️ "Sin horario esta semana" (ámbar). Se calcula **frontend-only**: tras cargar
+  el panel, se piden los horarios de cada colaborador (`getHorariosByEmpleado`) y se
+  chequea solape con [lunes, sábado] de la semana actual. Sin backend nuevo.
+- **Una acción principal** según estado: sin horario → **"Generar"**; con horario →
+  **"Ver horario"** (modal con los días/jornada/horas de la semana).
+- Acciones secundarias (Intercambiar / Cambiar turno / Eliminar horario) movidas a un
+  **menú "⋯"** para bajar el ruido visual. Eliminar queda deshabilitado si no hay nada.
+- Los badges se refrescan solos al generar / masiva / eliminar (todo pasa por
+  `cargarPanel`).
+
+---
+
 ## ✅ FASE 3 (COMPLETADA) — UX de Alta Velocidad (Flujos y Experiencia)
 
 Automatizar procesos para que la gestión del administrador sea rápida y a prueba
