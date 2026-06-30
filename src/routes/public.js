@@ -16,6 +16,23 @@ const client = axios.create({
     headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
 });
 
+// Sanitiza mojibake en nombres de dias: corrige caracteres UTF-8 que
+// fueron guardados como Latin-1 (p. ej. "Mi\u00c3\u00a9rcoles" -> "Mi\u00e9rcoles")
+// para horarios existentes antes de la correccion en schedule.js (Jun 2026).
+const fixMojibake = (str) => {
+    if (!str || typeof str !== "string") return str;
+    try {
+        const bytes = new Uint8Array(str.length);
+        for (let i = 0; i < str.length; i++) {
+            const code = str.charCodeAt(i);
+            bytes[i] = code > 255 ? 32 : code;
+        }
+        return new TextDecoder("utf-8").decode(bytes);
+    } catch {
+        return str;
+    }
+};
+
 const parseDateOnlyUTC = (value) => {
     if (!value) return null;
     if (value instanceof Date && isValid(value)) {
@@ -121,10 +138,21 @@ router.post("/consulta-horarios", async (req, res) => {
         
         if (obsError) throw obsError;
 
-        // 4. Devolver empleado (con turno_base), horarios Y observaciones
+        // 4. Sanitizar descripcion de horarios existentes (mojibake)
+        const horariosLimpios = (horariosData || []).map((h) => {
+            if (Array.isArray(h.dias)) {
+                h.dias = h.dias.map((d) => ({
+                    ...d,
+                    descripcion: fixMojibake(d.descripcion),
+                }));
+            }
+            return h;
+        });
+
+        // 5. Devolver empleado (con turno_base), horarios Y observaciones
         res.json({ 
             empleado: { ...empleado, turno_base }, 
-            horarios: horariosData || [],
+            horarios: horariosLimpios,
             observaciones: observacionesData || []
         });
 

@@ -104,20 +104,20 @@ const subtractTimeRanges = (segments, blockedRanges) => {
 };
 
 // ========================
-// Nombres de dÃ­as
+// Nombres de d\u00edas
 // ========================
 const WD_NAME = {
   1: "Lunes",
   2: "Martes",
-  3: "MiÃ©rcoles",
+  3: "Mi\u00e9rcoles",
   4: "Jueves",
   5: "Viernes",
-  6: "SÃ¡bado",
+  6: "S\u00e1bado",
   7: "Domingo",
 };
 
 // ========================
-// LÃ³gica de Capacidad (Â¡CON EXPORTS CORREGIDOS!)
+// Lógica de Capacidad (¡CON EXPORTS CORREGIDOS!)
 // ========================
 
 // Capacidad Legal MÃ¡xima (Base para 'horas_base')
