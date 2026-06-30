@@ -1,6 +1,6 @@
 // src/routes/empleadosRoutes.js
 import express from 'express';
-import { getEmpleados, createEmpleado, uploadEmpleados, toggleEmpleadoStatus, updateEmpleadoSede } from '../controllers/empleadosController.js';
+import { getEmpleados, createEmpleado, uploadEmpleados, toggleEmpleadoStatus, updateEmpleadoSede, updateEmpleadoDatos } from '../controllers/empleadosController.js';
 import multer from 'multer';
 
 const router = express.Router();
@@ -21,6 +21,10 @@ router.post('/upload', upload.single('file'), uploadEmpleados);
 // Ruta para cambiar la sede de un empleado
 // PATCH /api/empleados/:id/sede
 router.patch('/:id/sede', updateEmpleadoSede);
+
+// Ruta para editar los datos básicos de un empleado (cédula, nombre, correo, etc.)
+// PATCH /api/empleados/:id/datos
+router.patch('/:id/datos', updateEmpleadoDatos);
 
 // Ruta para actualizar el estado de un empleado
 // PATCH /api/empleados/:id

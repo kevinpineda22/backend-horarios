@@ -260,6 +260,56 @@ export const updateEmpleadoSede = async (req, res) => {
 };
 
 /**
+ * Endpoint para actualizar los datos básicos de un empleado.
+ * Permite editar cédula, nombre, correo, celular, rol y fecha de contratación.
+ * Solo actualiza los campos que llegan en el body (PATCH parcial).
+ */
+export const updateEmpleadoDatos = async (req, res) => {
+  const { id } = req.params;
+  const { cedula, nombre_completo, correo_electronico, celular, rol, fecha_contratacion } = req.body;
+
+  // Construimos el payload solo con los campos enviados, para no pisar con null
+  // lo que el cliente no quiso tocar.
+  const payload = {};
+  if (cedula !== undefined) payload.cedula = String(cedula).trim();
+  if (nombre_completo !== undefined) payload.nombre_completo = nombre_completo;
+  if (correo_electronico !== undefined) payload.correo_electronico = correo_electronico || null;
+  if (celular !== undefined) payload.celular = celular || null;
+  if (rol !== undefined) payload.rol = rol || null;
+  if (fecha_contratacion !== undefined) payload.fecha_contratacion = fecha_contratacion || null;
+
+  if (Object.keys(payload).length === 0) {
+    return res.status(400).json({ message: 'No se enviaron campos para actualizar.' });
+  }
+
+  if (payload.cedula === '') {
+    return res.status(400).json({ message: 'La cédula no puede quedar vacía.' });
+  }
+  if (payload.nombre_completo !== undefined && !String(payload.nombre_completo).trim()) {
+    return res.status(400).json({ message: 'El nombre no puede quedar vacío.' });
+  }
+
+  try {
+    const { data } = await supabaseAxios.patch(
+      `/empleados?id=eq.${id}&select=*`,
+      payload,
+      { headers: { Prefer: 'return=representation' } }
+    );
+    if (!data || data.length === 0) {
+      return res.status(404).json({ message: 'Empleado no encontrado.' });
+    }
+    res.json({ message: 'Datos del empleado actualizados.', empleado: data[0] });
+  } catch (e) {
+    // Cédula duplicada: PostgREST devuelve el código 23505 en el body del error.
+    if (e.response?.data?.code === '23505') {
+      return res.status(409).json({ message: 'Ya existe otro empleado con esa cédula.' });
+    }
+    console.error(e);
+    res.status(500).json({ message: 'Error al actualizar los datos del empleado', error: e.message });
+  }
+};
+
+/**
  * Endpoint para actualizar el estado de un empleado (activar/desactivar).
  */
 export const toggleEmpleadoStatus = async (req, res) => {

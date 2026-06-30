@@ -7,7 +7,6 @@ import horariosRoutes from "./src/routes/horarios.js";
 import observacionesRoutes from "./src/routes/observaciones.js";
 import publicRoutes from "./src/routes/public.js";
 import empleadosRoutes from "./src/routes/empleadosRoutes.js";
-import hoursBankRoutes from "./src/routes/hoursBank.js";
 import phConfigRoutes from "./src/routes/phConfig.js";
 
 const app = express();
@@ -28,7 +27,6 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use("/api/horarios", horariosRoutes);
 app.use("/api/observaciones", observacionesRoutes);
 app.use("/api/empleados", empleadosRoutes);
-app.use("/api/horas-compensacion", hoursBankRoutes);
 app.use("/api/public", publicRoutes);
 app.use("/api/ph-config", phConfigRoutes);
 
