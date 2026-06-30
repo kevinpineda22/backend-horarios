@@ -4,6 +4,7 @@ import axios from "axios";
 import dotenv from "dotenv";
 import Holidays from "date-holidays";
 import { parseISO, isValid } from "date-fns";
+import { getJornadaBaseVigente } from "../controllers/phConfigController.js";
 dotenv.config();
 
 const router = express.Router();
@@ -96,7 +97,16 @@ router.post("/consulta-horarios", async (req, res) => {
             return res.status(403).json({ message: "El empleado se encuentra inactivo." });
         }
 
-        // 2. Obtener horarios públicos (activos)
+        // 2.5 Obtener turno base vigente
+        let turno_base = null;
+        try {
+            const asignacion = await getJornadaBaseVigente(empleado.id);
+            turno_base = asignacion?.ph_jornadas || null;
+        } catch (e) {
+            console.error("Error fetching turno_base:", e.message);
+        }
+
+        // 3. Obtener horarios públicos (activos)
         const { data: horariosData, error: horariosError } = await client.get(
             `/horarios?empleado_id=eq.${empleado.id}&estado_visibilidad=eq.publico&select=*&order=fecha_inicio.desc`
         );
@@ -111,9 +121,9 @@ router.post("/consulta-horarios", async (req, res) => {
         
         if (obsError) throw obsError;
 
-        // 4. Devolver empleado, horarios Y observaciones
+        // 4. Devolver empleado (con turno_base), horarios Y observaciones
         res.json({ 
-            empleado, 
+            empleado: { ...empleado, turno_base }, 
             horarios: horariosData || [],
             observaciones: observacionesData || []
         });
