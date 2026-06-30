@@ -1,7 +1,12 @@
 import express from "express";
 import * as ctrl from "../controllers/horariosController.js";
+import { authenticateUser } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
+
+// Todas las rutas de horarios requieren autenticación.
+// (La consulta pública de horarios vive aparte, en /api/public.)
+router.use(authenticateUser);
 
 /**
  * PATCH /api/horarios/archivar

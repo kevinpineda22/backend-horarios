@@ -16,6 +16,13 @@ const client = axios.create({
     headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
 });
 
+// --- Validadores de input para endpoints PÚBLICOS ---
+// Estos valores van interpolados en queries PostgREST. Sin validación, un valor
+// con caracteres especiales (&, =, , ( ) . *) podría inyectar filtros extra y
+// exfiltrar datos. Validamos el FORMATO (cura de raíz) y además escapamos.
+const CEDULA_REGEX = /^[0-9A-Za-z]{3,20}$/; // documentos: solo alfanumérico
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 // Sanitiza mojibake en nombres de dias: corrige caracteres UTF-8 que
 // fueron guardados como Latin-1 (p. ej. "Mi\u00c3\u00a9rcoles" -> "Mi\u00e9rcoles")
 // para horarios existentes antes de la correccion en schedule.js (Jun 2026).
@@ -99,10 +106,15 @@ router.post("/consulta-horarios", async (req, res) => {
         return res.status(400).json({ message: "La cédula es requerida." });
     }
 
+    const cedulaLimpia = String(cedula).trim();
+    if (!CEDULA_REGEX.test(cedulaLimpia)) {
+        return res.status(400).json({ message: "La cédula ingresada no es válida." });
+    }
+
     try {
-        // 1. Buscar al empleado por cédula
+        // 1. Buscar al empleado por cédula (valor validado y escapado)
         const { data: empleadosData, error: empleadosError } = await client.get(
-            `/empleados?cedula=eq.${cedula}&select=id,nombre_completo,estado`
+            `/empleados?cedula=eq.${encodeURIComponent(cedulaLimpia)}&select=id,nombre_completo,estado`
         );
         if (empleadosError) throw empleadosError;
 
@@ -172,9 +184,14 @@ router.post("/observaciones-stats", async (req, res) => {
         }
         const results = [];
         for (const empleadoId of empleado_ids) {
+            // Solo procesamos IDs con formato UUID válido; descartamos cualquier
+            // valor que pudiera inyectar filtros en la query.
+            if (!UUID_REGEX.test(String(empleadoId))) {
+                continue;
+            }
             try {
                 const { data: obs, error: obsError } = await client.get(
-                    `/observaciones?select=tipo_novedad,fecha_novedad&empleado_id=eq.${empleadoId}`
+                    `/observaciones?select=tipo_novedad,fecha_novedad&empleado_id=eq.${encodeURIComponent(empleadoId)}`
                 );
                 if (obsError) {
                     console.error(`Error fetching observaciones for ${empleadoId}:`, obsError);

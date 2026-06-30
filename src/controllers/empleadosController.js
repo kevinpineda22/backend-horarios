@@ -134,15 +134,13 @@ export const createEmpleado = async (req, res) => {
       estado: 'activo'
     };
 
-    const { data, error } = await supabaseAxios.post('/empleados', [payload]);
-    if (error) {
-      if (error.code === '23505') {
-        return res.status(409).json({ message: 'Ya existe un empleado con esta cédula.' });
-      }
-      throw error;
-    }
+    const { data } = await supabaseAxios.post('/empleados', [payload]);
     res.status(201).json(data[0]);
   } catch (e) {
+    // Cédula duplicada: PostgREST devuelve el código 23505 en el body del error.
+    if (e.response?.data?.code === '23505') {
+      return res.status(409).json({ message: 'Ya existe un empleado con esta cédula.' });
+    }
     console.error(e);
     res.status(500).json({ message: 'Error al crear el empleado', error: e.message });
   }

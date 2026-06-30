@@ -1,10 +1,14 @@
 // src/routes/empleadosRoutes.js
 import express from 'express';
 import { getEmpleados, createEmpleado, uploadEmpleados, toggleEmpleadoStatus, updateEmpleadoSede, updateEmpleadoDatos } from '../controllers/empleadosController.js';
+import { authenticateUser } from '../middlewares/authMiddleware.js';
 import multer from 'multer';
 
 const router = express.Router();
 const upload = multer(); // Configura multer para manejar archivos en memoria
+
+// Todas las rutas de empleados requieren autenticación.
+router.use(authenticateUser);
 
 // Ruta para obtener la lista de todos los empleados
 // GET /api/empleados

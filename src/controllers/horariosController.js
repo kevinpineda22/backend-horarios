@@ -967,10 +967,12 @@ const archivarHorariosPorEmpleado = async (empleadoId) => {
       { count: "exact" }
     );
     if (error) throw error;
-    if (count > 0)
-      console.log(`${count} horarios archivados para ${empleadoId}.`);
-    else
-      console.log(`No hay horarios públicos para archivar para ${empleadoId}.`);
+    if (process.env.NODE_ENV !== "production") {
+      if (count > 0)
+        console.log(`${count} horarios archivados para ${empleadoId}.`);
+      else
+        console.log(`No hay horarios públicos para archivar para ${empleadoId}.`);
+    }
   } catch (e) {
     console.error(`Error archivando para ${empleadoId}:`, e);
     throw e;

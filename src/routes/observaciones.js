@@ -4,21 +4,21 @@ import { authenticateUser } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
 
+// Todas las rutas de observaciones requieren autenticación.
+// (La consulta pública lee observaciones aparte, en /api/public.)
+router.use(authenticateUser);
+
 /**
  * POST /api/observaciones/stats
  * Obtiene estadísticas de observaciones para múltiples empleados
  */
 router.post("/stats", ctrl.getObservacionesStats);
 
-router.patch(
-  "/:empleado_id/marcar-revisadas",
-  authenticateUser,
-  ctrl.marcarComoRevisadas,
-);
-router.patch("/:id/revisar", authenticateUser, ctrl.marcarUnaComoRevisada);
-router.get("/permissions", authenticateUser, ctrl.checkPermissions);
+router.patch("/:empleado_id/marcar-revisadas", ctrl.marcarComoRevisadas);
+router.patch("/:id/revisar", ctrl.marcarUnaComoRevisada);
+router.get("/permissions", ctrl.checkPermissions);
 router.get("/:empleado_id", ctrl.getObservacionesByEmpleadoId);
-router.post("/", authenticateUser, ctrl.createObservacion);
+router.post("/", ctrl.createObservacion);
 router.put("/:id", ctrl.updateObservacion); // El frontend usa PUT para actualizar
 router.delete("/:id", ctrl.deleteObservacion);
 
