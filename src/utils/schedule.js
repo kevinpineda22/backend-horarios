@@ -880,7 +880,6 @@ export function generateScheduleByShift(
 
           const wdd = isoWeekday(parseISO(d.fecha + "T00:00:00Z"));
           const nuevoTotal = Math.round((Number(d.horas) + aSumar) * 100) / 100;
-          const cap = getLegalCapForDay(wdd, cfg);
           const { bloques, entrada, salida } = buildEditedDayBlocks(
             d.fecha,
             turno,
@@ -888,13 +887,17 @@ export function generateScheduleByShift(
             nuevoTotal
           );
           d.horas = nuevoTotal;
-          d.horas_base = Math.min(nuevoTotal, cap);
-          d.horas_extra = Math.round((nuevoTotal - d.horas_base) * 100) / 100;
+          d.horas_redistribuidas =
+            Math.round(((d.horas_redistribuidas || 0) + aSumar) * 100) / 100;
+          // Las horas redistribuidas son compensación del día de estudio (p. ej.
+          // el sábado), NO horas extra: se contabilizan como horas legales/base
+          // del día que las recibe. Las extras REALES se agregan manualmente
+          // (Fase 3) y sí quedan en horas_extra.
+          d.horas_base =
+            Math.round((nuevoTotal - Number(d.horas_extra || 0)) * 100) / 100;
           d.bloques = bloques;
           d.jornada_entrada = entrada;
           d.jornada_salida = salida;
-          d.horas_redistribuidas =
-            Math.round(((d.horas_redistribuidas || 0) + aSumar) * 100) / 100;
         }
       }
     }

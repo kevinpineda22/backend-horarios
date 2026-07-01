@@ -16,7 +16,11 @@ import { format, parseISO, isValid, addDays } from "date-fns";
 import { sendEmail } from "../services/emailService.js";
 import { buildScheduleConfig } from "../services/phConfigService.js";
 import { getQuincenaRange } from "../utils/quincena.js";
-import { writeAuditEvent } from "../utils/auditoria.js";
+import {
+  writeAuditEvent,
+  auditUserFromReq,
+  resolveEmpleadoNombre,
+} from "../utils/auditoria.js";
 
 // --- Constantes y Helpers ---
 const toFixedNumber = (value) => Number(Number(value || 0).toFixed(2));
@@ -270,6 +274,7 @@ const writeAuditEntries = async ({
   tipoCambio = "edicion_manual",
 }) => {
   try {
+    const empleadoNombre = await resolveEmpleadoNombre(empleadoId);
     const rows = [];
     for (const d of nuevosDias) {
       const prev = previousMap.get(d.fecha);
@@ -283,6 +288,7 @@ const writeAuditEntries = async ({
       rows.push({
         horario_id: horarioId,
         empleado_id: empleadoId,
+        empleado_nombre: empleadoNombre,
         dia_afectado: d.fecha,
         tipo_cambio: tipoCambio,
         valor_anterior: { horas: prevH, entrada: prevEnt, salida: prevSal },
@@ -520,7 +526,7 @@ export const createHorario = async (req, res) => {
         rango: `${fecha_inicio} → ${fecha_fin}`,
         semanas: (dataSemanales || []).length,
       },
-      usuario: { nombre: creatorValue, email: null },
+      usuario: auditUserFromReq(req),
     });
 
     res.status(201).json({
@@ -564,11 +570,7 @@ export const updateHorario = async (req, res) => {
     }
 
     // Quién hace el cambio (para auditoría) y turno base (para bloques correctos).
-    const usuario = {
-      email: req.body?.usuario_email || req.user?.email || null,
-      nombre:
-        req.body?.usuario_nombre || req.body?.creado_por || req.user?.email || null,
-    };
+    const usuario = auditUserFromReq(req);
     const asignacion = await getJornadaBaseVigente(current.empleado_id);
     const turno = asignacion?.ph_jornadas || null;
 
@@ -817,10 +819,7 @@ export const intercambiarTurnos = async (req, res) => {
       .json({ message: "Los colaboradores deben ser distintos." });
   }
   try {
-    const usuario = {
-      email: req.body?.usuario_email || req.user?.email || null,
-      nombre: req.body?.usuario_nombre || req.user?.email || null,
-    };
+    const usuario = auditUserFromReq(req);
     const wd = isoWeekday(parseDateOnly(fecha));
 
     const [asigA, asigB] = await Promise.all([

@@ -150,7 +150,11 @@ describe("Estudio de dÃ­a completo â€” modos libre / redistribuir", () =>
 
     const lunes = dias.find((d) => d.fecha === LUNES);
     expect(lunes.horas).toBeCloseTo(10, 2);
-    expect(lunes.horas_extra).toBeCloseTo(2, 2);
+    // Las horas redistribuidas del sábado NO son extra: son compensación y
+    // cuentan como horas legales/base del día que las recibe.
+    expect(lunes.horas_extra).toBeCloseTo(0, 2);
+    expect(lunes.horas_base).toBeCloseTo(10, 2);
+    expect(lunes.horas_redistribuidas).toBeCloseTo(2, 2);
 
     // El total semanal se conserva (las 4h se mueven, no se pierden).
     expect(schedule[0].total_horas_semana).toBeCloseTo(44, 2);

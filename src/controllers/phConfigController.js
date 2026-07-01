@@ -7,7 +7,7 @@
 import { supabaseAxios } from "../services/supabaseAxios.js";
 import { invalidatePhConfigCache } from "../services/phConfigService.js";
 import { DEFAULT_SST_EMAILS, TIPO_CRITICA } from "../config/notificationDefaults.js";
-import { writeAuditEvent } from "../utils/auditoria.js";
+import { writeAuditEvent, auditUserFromReq } from "../utils/auditoria.js";
 
 const REPRESENTATION = { headers: { Prefer: "return=representation" } };
 
@@ -494,7 +494,7 @@ export const asignarJornada = async (req, res) => {
           turno: jNueva?.[0]?.nombre || jornada_id,
           desde: vigente_desde,
         },
-        usuario: { email: req.user?.email || null, nombre: req.user?.email || null },
+        usuario: auditUserFromReq(req),
       });
     } catch (_) {
       /* la auditoría no debe tumbar la asignación */
