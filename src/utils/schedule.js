@@ -916,27 +916,82 @@ export function generateScheduleByShift(
   return { schedule: outWeeks };
 }
 
+// Bloque que se EXTIENDE desde una hora de entrada cubriendo `totalHours` de
+// trabajo (mÃ¡s los descansos si aplican), sin acotarse a la salida del turno.
+// Se usa cuando el admin fija una entrada manual para el dÃ­a (spec: editar
+// entrada/salida) o cuando un sÃ¡bado supera 4h (lleva 15' + 45' como L-V).
+function buildExtendedDay(ymd, entrada, totalHours, withBreaks) {
+  const start = hmToMinutes(entrada);
+  const workMins = Math.round(totalHours * 60);
+  const breakMins = withBreaks ? BREAKFAST_MINUTES + LUNCH_MINUTES : 0;
+  // Ventana = trabajo + descansos. buildShiftSegments descuenta los descansos,
+  // dejando netHours == workMins.
+  const windowEnd = start + workMins + breakMins;
+  const { segments } = buildShiftSegments(
+    entrada,
+    minutesToHM(windowEnd),
+    withBreaks
+  );
+  const bloques = segmentsToBlocks(ymd, segments);
+  return {
+    bloques: bloques.length ? bloques : null,
+    entrada: segments.length ? minutesToHM(segments[0].from) : null,
+    salida: segments.length ? minutesToHM(segments[segments.length - 1].to) : null,
+  };
+}
+
 // Bloques de un dÃ­a EDITADO manualmente, respetando el turno del colaborador.
 // base = horas dentro del turno (con descansos L-V); extra = horas despuÃ©s de la
 // salida del turno. Determinista. Devuelve { bloques, entrada, salida }.
-export function buildEditedDayBlocks(ymd, turno, wd, totalHours) {
+//
+// `customEntrada` (opcional, "HH:MM"): entrada manual para ESTE dÃ­a. Si difiere
+// de la del turno, el bloque se arma desde ahÃ­ (layout extendido).
+//
+// SÃ¡bado: normalmente 4h continuas sin descansos; pero si se asignan MÃ¡S de 4h,
+// se aplican los descansos (15' desayuno + 45' almuerzo) igual que L-V.
+export function buildEditedDayBlocks(
+  ymd,
+  turno,
+  wd,
+  totalHours,
+  customEntrada = null
+) {
   if (!turno || !(totalHours > 0) || wd === 7) {
     return { bloques: null, entrada: null, salida: null };
   }
   const isSaturday = wd === 6;
-  const entrada = normalizeHM(
+  const entradaTurno = normalizeHM(
     isSaturday ? turno.sabado_entrada : turno.hora_entrada
   );
-  const salida = normalizeHM(
+  const salidaTurno = normalizeHM(
     isSaturday ? turno.sabado_salida : turno.hora_salida
   );
-  if (!entrada || !salida) {
+
+  const entradaManual = normalizeHM(customEntrada);
+  const entrada = entradaManual || entradaTurno;
+  if (!entrada) {
     return { bloques: null, entrada: null, salida: null };
   }
 
+  // Â¿Descansos (15' + 45')? L-V siempre; sÃ¡bado solo si supera 4h.
+  const withBreaks = !isSaturday || totalHours > 4;
+
+  // Casos que se arman DESDE la entrada (no acotados por la salida del turno):
+  //  - entrada manual distinta a la del turno (editar entrada/salida del dÃ­a).
+  //  - sÃ¡bado con mÃ¡s de 4h (lleva descansos como L-V).
+  const hasCustomEntry = Boolean(entradaManual) && entradaManual !== entradaTurno;
+  if (hasCustomEntry || (isSaturday && totalHours > 4)) {
+    return buildExtendedDay(ymd, entrada, totalHours, withBreaks);
+  }
+
+  // Caso normal (comportamiento previo): base dentro de la ventana del turno,
+  // extra en bloque continuo despuÃ©s de la salida.
+  if (!salidaTurno) {
+    return { bloques: null, entrada: null, salida: null };
+  }
   const { segments: shiftSegs, netHours } = buildShiftSegments(
     entrada,
-    salida,
+    salidaTurno,
     !isSaturday
   );
   const baseHours = Math.min(totalHours, netHours);
@@ -953,7 +1008,7 @@ export function buildEditedDayBlocks(ymd, turno, wd, totalHours) {
   }
   // Extra: bloque continuo despuÃ©s de la salida del turno.
   if (extraHours > 0) {
-    const exitMin = hmToMinutes(salida);
+    const exitMin = hmToMinutes(salidaTurno);
     segs.push({ from: exitMin, to: exitMin + Math.round(extraHours * 60) });
   }
 

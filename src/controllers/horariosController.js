@@ -26,6 +26,77 @@ import {
 const toFixedNumber = (value) => Number(Number(value || 0).toFixed(2));
 const MAX_OVERTIME_PER_DAY = 4;
 
+// URL pública donde el colaborador consulta su horario (ingresa su cédula).
+const PUBLIC_CONSULTA_URL =
+  process.env.PUBLIC_CONSULTA_URL || "https://merkahorro.com/consulta-horarios";
+
+// Construye el HTML del correo de notificación de horario. Se usa tanto al
+// crear el horario como al reenviarlo manualmente tras editarlo.
+const buildHorarioEmailHtml = (nombre, fechaInicio, fechaFin) => `
+    <!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Horario Asignado</title></head>
+    <body style="font-family: Arial, sans-serif; margin: 0; padding: 20px;">
+    <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e0e0e0;">
+        <div style="background-color: #210d65; color: #ffffff; text-align: center; padding: 25px;">
+            <h1 style="margin: 0; font-size: 24px;">📅 Horario Asignado</h1>
+        </div>
+        <div style="padding: 30px;">
+            <p style="font-size: 18px; color: #210d65; margin: 0 0 20px 0;">Hola <strong>${nombre}</strong>,</p>
+            <p style="color: #333333; font-size: 16px; margin: 0 0 20px 0; line-height: 1.5;">
+                Te informamos que tu horario laboral fue generado/actualizado y ya está disponible:
+            </p>
+            <div style="background-color: #f8f9ff; border-left: 3px solid #210d65; padding: 15px; margin: 20px 0;">
+                <p style="margin: 0 0 10px 0; color: #333333; font-size: 16px;"><strong>Período asignado:</strong></p>
+                <p style="font-size: 18px; color: #210d65; text-align: center; margin: 0; font-weight: bold;">
+                    ${fechaInicio} al ${fechaFin}
+                </p>
+            </div>
+            <div style="text-align: center; margin-top: 30px;">
+                <a href="${PUBLIC_CONSULTA_URL}" style="background-color: #210d65; color: #ffffff; text-decoration: none; padding: 12px 30px; font-size: 16px; font-weight: bold;">
+                    Ver Mi Horario
+                </a>
+            </div>
+        </div>
+        <div style="background-color: #f8f9fa; padding: 20px; text-align: center; border-top: 1px solid #e0e0e0;">
+            <p style="margin: 0; color: #666666; font-size: 14px;">Este es un mensaje automatizado.</p>
+        </div>
+    </div>
+    </body></html>`;
+
+// Envía el correo de horario a un empleado. Devuelve un objeto de estado con
+// { sent, error, empleado } (nunca lanza: el correo no debe tumbar el flujo).
+const enviarCorreoHorario = async (empleadoId, fechaInicio, fechaFin) => {
+  const status = { sent: false, error: null, empleado: null };
+  try {
+    const {
+      data: [emp],
+      error: empErr,
+    } = await supabaseAxios.get(
+      `/empleados?select=nombre_completo,correo_electronico&id=eq.${empleadoId}`
+    );
+    if (empErr || !emp) {
+      status.error = "No se pudo obtener datos del empleado";
+      return status;
+    }
+    status.empleado = emp.nombre_completo;
+    if (!emp.correo_electronico) {
+      status.error = "Empleado sin correo";
+      return status;
+    }
+    const subject = `📅 Horario asignado: ${fechaInicio} al ${fechaFin}`;
+    const htmlContent = buildHorarioEmailHtml(
+      emp.nombre_completo,
+      fechaInicio,
+      fechaFin
+    );
+    await sendEmail(emp.correo_electronico, subject, htmlContent);
+    status.sent = true;
+    return status;
+  } catch (emailError) {
+    status.error = `Error enviando correo: ${emailError.message}`;
+    return status;
+  }
+};
+
 // Carga la config de negocio (límites del panel) sin romper la generación si la
 // BD falla o está vacía: en ese caso devuelve null y el motor usa sus defaults
 // legales. Así el cableado es no-destructivo hasta que un admin configure.
@@ -347,6 +418,68 @@ export const getExtrasQuincena = async (req, res) => {
   }
 };
 
+// POST /horarios/notificar/:empleado_id
+// Reenvía manualmente el correo de horario al colaborador. Pensado para usarse
+// DESPUÉS de que el admin edita el horario base (el envío automático solo ocurre
+// al crearlo). Usa el rango del horario público vigente, o fecha_inicio/fecha_fin
+// del body si se envían.
+export const notificarHorario = async (req, res) => {
+  const { empleado_id } = req.params;
+  let { fecha_inicio, fecha_fin } = req.body || {};
+  try {
+    if (!fecha_inicio || !fecha_fin) {
+      const { data, error } = await supabaseAxios.get(
+        `/horarios?select=fecha_inicio,fecha_fin&empleado_id=eq.${empleado_id}&estado_visibilidad=eq.publico&order=fecha_inicio.asc`
+      );
+      if (error) throw error;
+      if (!data || data.length === 0) {
+        return res.status(404).json({
+          message: "El colaborador no tiene un horario público para notificar.",
+        });
+      }
+      fecha_inicio = data[0].fecha_inicio;
+      fecha_fin = data.reduce(
+        (max, h) => (h.fecha_fin > max ? h.fecha_fin : max),
+        data[0].fecha_fin
+      );
+    }
+
+    const emailStatus = await enviarCorreoHorario(
+      empleado_id,
+      fecha_inicio,
+      fecha_fin
+    );
+    if (!emailStatus.sent) {
+      return res.status(422).json({
+        message: emailStatus.error || "No se pudo enviar el correo.",
+        email_notification: emailStatus,
+      });
+    }
+
+    // Auditoría best-effort del reenvío manual.
+    await writeAuditEvent({
+      empleadoId: empleado_id,
+      tipoCambio: "notificacion_horario",
+      valorNuevo: {
+        accion: "Correo de horario reenviado",
+        rango: `${fecha_inicio} → ${fecha_fin}`,
+        destino: emailStatus.empleado,
+      },
+      usuario: auditUserFromReq(req),
+    });
+
+    res.json({
+      message: `Correo enviado a ${emailStatus.empleado}.`,
+      email_notification: emailStatus,
+    });
+  } catch (e) {
+    console.error("Error notificando horario:", e);
+    res
+      .status(500)
+      .json({ message: "Error al enviar la notificación", error: e.message });
+  }
+};
+
 export const createHorario = async (req, res) => {
   try {
     const {
@@ -464,58 +597,9 @@ export const createHorario = async (req, res) => {
           }
         : null;
 
-    let emailStatus = { sent: false, error: null, empleado: null };
-    try {
-      const {
-        data: [emp],
-        error: empErr,
-      } = await supabaseAxios.get(
-        `/empleados?select=nombre_completo,correo_electronico&id=eq.${empleado_id}`
-      );
-      if (empErr || !emp) {
-        emailStatus.error = "No se pudo obtener datos del empleado";
-      } else if (!emp.correo_electronico) {
-        emailStatus.error = "Empleado sin correo";
-        emailStatus.empleado = emp.nombre_completo;
-      } else {
-        const subject = `🗓️ Horario asignado: ${fecha_inicio} al ${fecha_fin}`;
-        const publicUrl = "https://merkahorro.com/consulta-horarios"; // Cambia si es necesario
-        const htmlContent = `
-                    <!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Horario Asignado</title></head>
-                    <body style="font-family: Arial, sans-serif; margin: 0; padding: 20px;">
-                    <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e0e0e0;">
-                        <div style="background-color: #210d65; color: #ffffff; text-align: center; padding: 25px;">
-                            <h1 style="margin: 0; font-size: 24px;">📅 Horario Asignado</h1>
-                        </div>
-                        <div style="padding: 30px;">
-                            <p style="font-size: 18px; color: #210d65; margin: 0 0 20px 0;">Hola <strong>${emp.nombre_completo}</strong>,</p>
-                            <p style="color: #333333; font-size: 16px; margin: 0 0 20px 0; line-height: 1.5;">
-                                Te informamos que tu nuevo horario laboral ha sido generado y asignado:
-                            </p>
-                            <div style="background-color: #f8f9ff; border-left: 3px solid #210d65; padding: 15px; margin: 20px 0;">
-                                <p style="margin: 0 0 10px 0; color: #333333; font-size: 16px;"><strong>Período asignado:</strong></p>
-                                <p style="font-size: 18px; color: #210d65; text-align: center; margin: 0; font-weight: bold;">
-                                    ${fecha_inicio} al ${fecha_fin}
-                                </p>
-                            </div>
-                            <div style="text-align: center; margin-top: 30px;">
-                                <a href="${publicUrl}" style="background-color: #210d65; color: #ffffff; text-decoration: none; padding: 12px 30px; font-size: 16px; font-weight: bold;">
-                                    Ver Mi Horario
-                                </a>
-                            </div>
-                        </div>
-                        <div style="background-color: #f8f9fa; padding: 20px; text-align: center; border-top: 1px solid #e0e0e0;">
-                            <p style="margin: 0; color: #666666; font-size: 14px;">Este es un mensaje automatizado.</p>
-                        </div>
-                    </div>
-                    </body></html>`;
-        await sendEmail(emp.correo_electronico, subject, htmlContent);
-        emailStatus.sent = true;
-        emailStatus.empleado = emp.nombre_completo;
-      }
-    } catch (emailError) {
-      emailStatus.error = `Error enviando correo: ${emailError.message}`;
-    }
+    // NO se envía correo al crear. La notificación es EXCLUSIVAMENTE manual:
+    // el admin la dispara con el botón "Enviar correo" (POST /horarios/notificar).
+    // Así el correo nunca sale hasta que el admin revisa/ajusta el horario.
 
     // Auditoría: generación de horario (spec 5.2 / 8).
     await writeAuditEvent({
@@ -531,7 +615,6 @@ export const createHorario = async (req, res) => {
 
     res.status(201).json({
       horarios: dataSemanales || [],
-      email_notification: emailStatus,
       compensacion_estudio: estudioCompensacion,
     });
   } catch (e) {
@@ -696,11 +779,17 @@ export const updateHorario = async (req, res) => {
       if (totalHours > 0 && wd !== 7) {
         if (turno) {
           // Modelo nuevo: bloques según el turno del colaborador.
+          // Si el admin fijó una entrada manual para este día (entrada_editada),
+          // se respeta como hora de entrada y el bloque se arma desde ahí.
+          const customEntrada = day.entrada_editada
+            ? day.jornada_entrada
+            : null;
           const { bloques, entrada, salida } = buildEditedDayBlocks(
             day.fecha,
             turno,
             wd,
-            totalHours
+            totalHours,
+            customEntrada
           );
           day.bloques = bloques;
           day.jornada_entrada = entrada;

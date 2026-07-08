@@ -52,6 +52,12 @@ router.get("/:empleado_id", ctrl.getHorariosByEmpleadoId);
 router.post("/intercambio", ctrl.intercambiarTurnos);
 
 /**
+ * POST /api/horarios/notificar/:empleado_id
+ * Reenvía manualmente el correo de horario al colaborador (tras editarlo).
+ */
+router.post("/notificar/:empleado_id", ctrl.notificarHorario);
+
+/**
  * POST /api/horarios
  * Crea horario(s) semanal(es) automático(s).
  */
