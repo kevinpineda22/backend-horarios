@@ -739,13 +739,33 @@ export function generateScheduleByShift(
 
       if (isHoliday && holidayOverride === "skip") continue;
 
-      // Domingo: no se trabaja.
+      // Domingo: dÃ­a trabajable OPCIONAL. `sundayOverrides[ymd]` ahora trae el
+      // NÃšMERO de horas a trabajar (0/ausente = descanso). Todas esas horas son
+      // EXTRA (en domingo no hay jornada legal). El modelo viejo guardaba acÃ¡ un
+      // string ("compensado"/"sin-compensar"); Number(...) de eso da NaN => 0 =>
+      // descanso, asÃ­ que esos registros quedan como dÃ­as libres sin romper.
       if (isSunday) {
-        dias.push(
-          emptyDay(ymd, wd, {
-            domingo_estado: sundayOverrides[ymd] || null,
-          })
-        );
+        const horasDomingo = Number(sundayOverrides[ymd]) || 0;
+        if (horasDomingo > 0) {
+          const {
+            bloques,
+            entrada: domEntrada,
+            salida: domSalida,
+          } = buildSundayBlocks(ymd, turno, horasDomingo);
+          dias.push({
+            ...emptyDay(ymd, wd),
+            horas: horasDomingo,
+            horas_base: 0,
+            horas_extra: horasDomingo,
+            bloques,
+            jornada_entrada: domEntrada,
+            jornada_salida: domSalida,
+            domingo_estado: null,
+            domingo_trabajado: true,
+          });
+        } else {
+          dias.push(emptyDay(ymd, wd, { domingo_estado: null }));
+        }
         continue;
       }
 
@@ -937,6 +957,25 @@ function buildExtendedDay(ymd, entrada, totalHours, withBreaks) {
     bloques: bloques.length ? bloques : null,
     entrada: segments.length ? minutesToHM(segments[0].from) : null,
     salida: segments.length ? minutesToHM(segments[segments.length - 1].to) : null,
+  };
+}
+
+// Domingo TRABAJADO: bloque continuo desde la entrada del turno cubriendo
+// `totalHours`. En domingo no hay jornada legal, asÃ­ que TODAS las horas son
+// extra y el bloque va sin descansos (tal como se capturan). `customEntrada`
+// (opcional, "HH:MM") permite fijar otra entrada para ese domingo.
+export function buildSundayBlocks(ymd, turno, totalHours, customEntrada = null) {
+  const entrada = normalizeHM(customEntrada) || normalizeHM(turno?.hora_entrada);
+  if (!(totalHours > 0) || !entrada) {
+    return { bloques: null, entrada: null, salida: null };
+  }
+  const start = hmToMinutes(entrada);
+  const segs = [{ from: start, to: start + Math.round(totalHours * 60) }];
+  const bloques = segmentsToBlocks(ymd, segs);
+  return {
+    bloques: bloques.length ? bloques : null,
+    entrada: minutesToHM(segs[0].from),
+    salida: minutesToHM(segs[0].to),
   };
 }
 

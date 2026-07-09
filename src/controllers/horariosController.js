@@ -3,6 +3,7 @@ import { supabaseAxios } from "../services/supabaseAxios.js";
 import {
   generateScheduleByShift,
   buildEditedDayBlocks,
+  buildSundayBlocks,
   isoWeekday,
   getDayInfo,
   allocateHoursRandomly,
@@ -754,7 +755,10 @@ export const updateHorario = async (req, res) => {
       const totalHours = day.horas;
 
       const regularCap = getRegularDailyCap(wd);
-      const overtimeLimit = regularCap + MAX_OVERTIME_PER_DAY;
+      // Domingo trabajado: no tiene jornada legal (regularCap=0), pero se admite
+      // como día completo (mismo techo que L-V: 10 + 4 de máximo diario).
+      const overtimeLimit =
+        wd === 7 ? 14 : regularCap + MAX_OVERTIME_PER_DAY;
 
       if (totalHours > overtimeLimit + 1e-6) {
         return res.status(400).json({
@@ -767,7 +771,9 @@ export const updateHorario = async (req, res) => {
 
       const base = Math.min(totalHours, legalCapForDay);
       const extra = Math.max(0, totalHours - base);
-      const payableExtra = Math.min(extra, payableExtraCap);
+      // Domingo: todas las horas son extra y 100% pagables (no tiene tope legal).
+      const payableExtra =
+        wd === 7 ? extra : Math.min(extra, payableExtraCap);
 
       legalSum = toFixedNumber(legalSum + base);
       payableExtraSum = toFixedNumber(payableExtraSum + payableExtra);
@@ -776,7 +782,22 @@ export const updateHorario = async (req, res) => {
       day.horas_base = base;
       day.horas_extra = extra;
 
-      if (totalHours > 0 && wd !== 7) {
+      if (totalHours > 0 && wd === 7) {
+        // Domingo trabajado: bloque continuo desde la entrada del turno; todas
+        // las horas quedan como extra (base ya = 0 porque el tope legal es 0).
+        const customEntrada = day.entrada_editada ? day.jornada_entrada : null;
+        const { bloques, entrada, salida } = buildSundayBlocks(
+          day.fecha,
+          turno,
+          totalHours,
+          customEntrada
+        );
+        day.bloques = bloques;
+        day.jornada_entrada = entrada;
+        day.jornada_salida = salida;
+        day.domingo_estado = null;
+        day.domingo_trabajado = true;
+      } else if (totalHours > 0) {
         if (turno) {
           // Modelo nuevo: bloques según el turno del colaborador.
           // Si el admin fijó una entrada manual para este día (entrada_editada),
