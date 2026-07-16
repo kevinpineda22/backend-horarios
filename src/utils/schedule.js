@@ -939,7 +939,7 @@ export function generateScheduleByShift(
 // Bloque que se EXTIENDE desde una hora de entrada cubriendo `totalHours` de
 // trabajo (mÃ¡s los descansos si aplican), sin acotarse a la salida del turno.
 // Se usa cuando el admin fija una entrada manual para el dÃ­a (spec: editar
-// entrada/salida) o cuando un sÃ¡bado supera 4h (lleva 15' + 45' como L-V).
+// entrada/salida).
 function buildExtendedDay(ymd, entrada, totalHours, withBreaks) {
   const start = hmToMinutes(entrada);
   const workMins = Math.round(totalHours * 60);
@@ -986,8 +986,8 @@ export function buildSundayBlocks(ymd, turno, totalHours, customEntrada = null) 
 // `customEntrada` (opcional, "HH:MM"): entrada manual para ESTE dÃ­a. Si difiere
 // de la del turno, el bloque se arma desde ahÃ­ (layout extendido).
 //
-// SÃ¡bado: normalmente 4h continuas sin descansos; pero si se asignan MÃ¡S de 4h,
-// se aplican los descansos (15' desayuno + 45' almuerzo) igual que L-V.
+// SÃ¡bado: SIEMPRE bloque continuo sin descansos, sin importar cuÃ¡ntas horas se
+// asignen (el sÃ¡bado no lleva desayuno ni almuerzo).
 export function buildEditedDayBlocks(
   ymd,
   turno,
@@ -1012,14 +1012,14 @@ export function buildEditedDayBlocks(
     return { bloques: null, entrada: null, salida: null };
   }
 
-  // Â¿Descansos (15' + 45')? L-V siempre; sÃ¡bado solo si supera 4h.
-  const withBreaks = !isSaturday || totalHours > 4;
+  // Descansos (15' + 45'): L-V siempre. El sÃ¡bado NUNCA lleva descansos, sin
+  // importar las horas asignadas.
+  const withBreaks = !isSaturday;
 
-  // Casos que se arman DESDE la entrada (no acotados por la salida del turno):
-  //  - entrada manual distinta a la del turno (editar entrada/salida del dÃ­a).
-  //  - sÃ¡bado con mÃ¡s de 4h (lleva descansos como L-V).
+  // Caso que se arma DESDE la entrada (no acotado por la salida del turno):
+  // entrada manual distinta a la del turno (editar entrada/salida del dÃ­a).
   const hasCustomEntry = Boolean(entradaManual) && entradaManual !== entradaTurno;
-  if (hasCustomEntry || (isSaturday && totalHours > 4)) {
+  if (hasCustomEntry) {
     return buildExtendedDay(ymd, entrada, totalHours, withBreaks);
   }
 

@@ -429,13 +429,17 @@ export const notificarHorario = async (req, res) => {
   let { fecha_inicio, fecha_fin } = req.body || {};
   try {
     if (!fecha_inicio || !fecha_fin) {
+      // Solo semanas VIGENTES o FUTURAS: como los horarios son acumulativos, el
+      // histórico completo haría que el correo anunciara un rango de meses.
+      const hoy = new Date().toISOString().slice(0, 10);
       const { data, error } = await supabaseAxios.get(
-        `/horarios?select=fecha_inicio,fecha_fin&empleado_id=eq.${empleado_id}&estado_visibilidad=eq.publico&order=fecha_inicio.asc`
+        `/horarios?select=fecha_inicio,fecha_fin&empleado_id=eq.${empleado_id}&estado_visibilidad=eq.publico&fecha_fin=gte.${hoy}&order=fecha_inicio.asc`
       );
       if (error) throw error;
       if (!data || data.length === 0) {
         return res.status(404).json({
-          message: "El colaborador no tiene un horario público para notificar.",
+          message:
+            "El colaborador no tiene un horario vigente o futuro para notificar.",
         });
       }
       fecha_inicio = data[0].fecha_inicio;
@@ -554,7 +558,10 @@ export const createHorario = async (req, res) => {
       cfg
     );
 
-    await archivarHorariosPorEmpleado(empleado_id);
+    // Los horarios son ACUMULATIVOS: generar una semana nueva NO borra ni oculta
+    // las que ya existen. Solo se archivan las semanas que SE SOLAPAN con el
+    // rango que se está generando (regenerar = reemplazar ese tramo).
+    await archivarHorariosSolapados(empleado_id, fecha_inicio, fecha_fin);
 
     const creatorValue =
       typeof creado_por === "string" && creado_por.trim().length > 0
@@ -1067,23 +1074,26 @@ export const archivarHorarios = async (req, res) => {
   }
 };
 
-// Función auxiliar archivarHorariosPorEmpleado
-const archivarHorariosPorEmpleado = async (empleadoId) => {
+// Archiva SOLO los horarios públicos del colaborador cuyo rango se solapa con
+// [fechaInicio, fechaFin]. Se usa al generar: regenerar un tramo reemplaza las
+// semanas de ESE tramo y deja intactas las demás (semanas acumulativas).
+// Solape = existente.fecha_inicio <= nuevo.fecha_fin && existente.fecha_fin >= nuevo.fecha_inicio.
+const archivarHorariosSolapados = async (empleadoId, fechaInicio, fechaFin) => {
   try {
     const { count, error } = await supabaseAxios.patch(
-      `/horarios?empleado_id=eq.${empleadoId}&estado_visibilidad=eq.publico`,
+      `/horarios?empleado_id=eq.${empleadoId}&estado_visibilidad=eq.publico` +
+        `&fecha_inicio=lte.${fechaFin}&fecha_fin=gte.${fechaInicio}`,
       { estado_visibilidad: "archivado" },
       { count: "exact" }
     );
     if (error) throw error;
     if (process.env.NODE_ENV !== "production") {
-      if (count > 0)
-        console.log(`${count} horarios archivados para ${empleadoId}.`);
-      else
-        console.log(`No hay horarios públicos para archivar para ${empleadoId}.`);
+      console.log(
+        `${count || 0} horarios solapados archivados para ${empleadoId} (${fechaInicio} → ${fechaFin}).`
+      );
     }
   } catch (e) {
-    console.error(`Error archivando para ${empleadoId}:`, e);
+    console.error(`Error archivando solapados para ${empleadoId}:`, e);
     throw e;
   }
 };
