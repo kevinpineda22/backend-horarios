@@ -16,6 +16,13 @@ router.use(authenticateUser);
 router.patch("/archivar", ctrl.archivarHorarios);
 
 /**
+ * GET /api/horarios/informe-extras?desde=&hasta=&sede_id=
+ * Informe agregado de horas extra: quién hizo extras en el rango y cuántas,
+ * por sede (spec 4.2). Debe ir antes de la ruta genérica /:empleado_id.
+ */
+router.get("/informe-extras", ctrl.getInformeExtras);
+
+/**
  * GET /api/horarios/extras-quincena/:empleado_id?fecha=YYYY-MM-DD
  * Acumulado de horas extra en la quincena vs. el máximo configurable (spec 4.2).
  * Debe ir antes de la ruta genérica /:empleado_id.

@@ -402,6 +402,159 @@ export const getAuditoria = async (req, res) => {
   }
 };
 
+// GET /horarios/informe-extras?desde=&hasta=&sede_id=   (spec 4.2)
+// Informe AGREGADO de horas extra: quién hizo extras en el rango y cuántas,
+// agrupado por sede. Existe para que Gestión Humana deje de revisar colaborador
+// por colaborador: resuelve en 3 queries lo que antes eran N (una por empleado).
+// Sin `desde`/`hasta` usa la quincena actual (que es como se controla el tope).
+export const getInformeExtras = async (req, res) => {
+  const { sede_id } = req.query;
+  try {
+    // 1. Rango: el pedido, o la quincena de hoy como defecto.
+    const hoy = new Date().toISOString().slice(0, 10);
+    let desde = req.query.desde;
+    let hasta = req.query.hasta;
+    if (!desde || !hasta) {
+      const q = getQuincenaRange(hoy);
+      desde = desde || q.inicio;
+      hasta = hasta || q.fin;
+    }
+    if (!parseDateOnly(desde) || !parseDateOnly(hasta)) {
+      return res.status(400).json({ message: "Fechas inválidas." });
+    }
+    if (hasta < desde) {
+      return res.status(400).json({ message: "La fecha fin es anterior al inicio." });
+    }
+
+    // 2. Colaboradores (opcionalmente de una sede) + catálogo de sedes.
+    let empleadosUrl = `/empleados?select=id,nombre_completo,cedula,sede_id&estado=eq.activo&order=nombre_completo.asc`;
+    if (sede_id) empleadosUrl += `&sede_id=eq.${sede_id}`;
+    const [empRes, sedesRes] = await Promise.all([
+      supabaseAxios.get(empleadosUrl),
+      supabaseAxios.get(`/sedes?select=id,nombre&order=nombre.asc`),
+    ]);
+    const empleados = empRes.data || [];
+    const sedes = sedesRes.data || [];
+    const nombreSede = new Map(sedes.map((s) => [s.id, s.nombre]));
+
+    // Dotación por sede: permite decir "3 de 12 colaboradores hicieron extras"
+    // incluso para una sede donde nadie hizo (no aparece en el desglose).
+    const empleadosPorSede = empleados.reduce((acc, e) => {
+      const key = e.sede_id || "sin-sede";
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
+
+    if (empleados.length === 0) {
+      return res.json({
+        desde,
+        hasta,
+        maximo_quincena: null,
+        es_quincena: false,
+        total_extras: 0,
+        total_empleados: 0,
+        empleados_por_sede: {},
+        sedes: [],
+        empleados: [],
+      });
+    }
+
+    // 3. Horarios públicos que TOCAN el rango, de esos colaboradores.
+    const ids = empleados.map((e) => e.id).join(",");
+    const { data: horarios, error } = await supabaseAxios.get(
+      `/horarios?select=empleado_id,dias&estado_visibilidad=eq.publico` +
+        `&empleado_id=in.(${ids})&fecha_inicio=lte.${hasta}&fecha_fin=gte.${desde}`
+    );
+    if (error) throw error;
+
+    // 4. Agregar por colaborador, contando SOLO los días dentro del rango (una
+    //    semana puede cruzar el borde de la quincena).
+    const acumPorEmpleado = new Map();
+    for (const h of horarios || []) {
+      for (const dia of h.dias || []) {
+        if (!dia?.fecha || dia.fecha < desde || dia.fecha > hasta) continue;
+        const extra = Number(dia.horas_extra || 0);
+        if (!(extra > 0)) continue;
+        if (!acumPorEmpleado.has(h.empleado_id)) {
+          acumPorEmpleado.set(h.empleado_id, { total: 0, detalle: [] });
+        }
+        const acc = acumPorEmpleado.get(h.empleado_id);
+        acc.total += extra;
+        acc.detalle.push({
+          fecha: dia.fecha,
+          descripcion: dia.descripcion || null,
+          horas_extra: toFixedNumber(extra),
+          horas: toFixedNumber(dia.horas),
+          es_domingo: isoWeekday(dia.fecha) === 7,
+          festivo_trabajado: Boolean(dia.festivo_trabajado),
+        });
+      }
+    }
+
+    // 5. Tope de la quincena: solo aplica si el rango ES exactamente una quincena.
+    const cfg = await loadScheduleConfigSafe();
+    const maxRaw = cfg?.limites?.maxExtraPorQuincena;
+    const maximo = maxRaw == null || maxRaw === "" ? null : Number(maxRaw);
+    const q = getQuincenaRange(desde);
+    const esQuincena = Boolean(q && q.inicio === desde && q.fin === hasta);
+
+    // 6. Solo los que HICIERON extras, de mayor a menor.
+    const filas = empleados
+      .filter((e) => acumPorEmpleado.has(e.id))
+      .map((e) => {
+        const acc = acumPorEmpleado.get(e.id);
+        const total = toFixedNumber(acc.total);
+        return {
+          empleado_id: e.id,
+          nombre_completo: e.nombre_completo,
+          cedula: e.cedula,
+          sede_id: e.sede_id,
+          sede_nombre: nombreSede.get(e.sede_id) || "Sin sede",
+          total_extra: total,
+          dias_con_extra: acc.detalle.length,
+          // El tope es por quincena: marcarlo en otro rango sería mentir.
+          supera_maximo: esQuincena && maximo != null && total > maximo,
+          detalle: acc.detalle.sort((a, b) => a.fecha.localeCompare(b.fecha)),
+        };
+      })
+      .sort((a, b) => b.total_extra - a.total_extra);
+
+    // 7. Totales por sede (solo sedes con extras en el rango).
+    const porSede = new Map();
+    for (const f of filas) {
+      const key = f.sede_id || "sin-sede";
+      if (!porSede.has(key)) {
+        porSede.set(key, {
+          sede_id: f.sede_id,
+          sede_nombre: f.sede_nombre,
+          total_extra: 0,
+          empleados_con_extra: 0,
+        });
+      }
+      const s = porSede.get(key);
+      s.total_extra = toFixedNumber(s.total_extra + f.total_extra);
+      s.empleados_con_extra += 1;
+    }
+
+    res.json({
+      desde,
+      hasta,
+      maximo_quincena: maximo,
+      es_quincena: esQuincena,
+      total_extras: toFixedNumber(filas.reduce((s, f) => s + f.total_extra, 0)),
+      total_empleados: empleados.length,
+      empleados_por_sede: empleadosPorSede,
+      sedes: [...porSede.values()].sort((a, b) => b.total_extra - a.total_extra),
+      empleados: filas,
+    });
+  } catch (e) {
+    console.error("Error armando el informe de extras:", e);
+    res
+      .status(500)
+      .json({ message: "Error armando el informe de extras", error: e.message });
+  }
+};
+
 // GET /horarios/extras-quincena/:empleado_id?fecha=YYYY-MM-DD  (spec 4.2)
 export const getExtrasQuincena = async (req, res) => {
   const { empleado_id } = req.params;
